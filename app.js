@@ -486,7 +486,7 @@ function parseSMS() {
 
 // Save Transaction
 async function saveTransaction() {
-    let type = document.getElementById('type-select').value;
+    let type = document.querySelector('input[name="tx_type"]:checked').value;
     const date = document.getElementById('date-input').value;
     const merchant = document.getElementById('merchant-input').value;
     const amount = Number(document.getElementById('amount-input').value.replace(/,/g, ''));
@@ -555,7 +555,10 @@ window.editTransaction = function(id) {
     document.querySelector('a[data-target="input-section"]').click();
     
     // 정보 채우기
-    document.getElementById('type-select').value = tx.type;
+    let typeRadio = document.querySelector(`input[name="tx_type"][value="${tx.type}"]`);
+    if(typeRadio) typeRadio.checked = true;
+    else document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
+    
     document.getElementById('date-input').value = tx.date;
     document.getElementById('merchant-input').value = tx.merchant;
     document.getElementById('amount-input').value = Number(tx.amount).toLocaleString();
@@ -580,7 +583,7 @@ window.cancelEdit = function() {
     smsInput.value = '';
     document.getElementById('amount-input').value = '';
     document.getElementById('merchant-input').value = '';
-    document.getElementById('type-select').value = 'expense';
+    document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
     document.getElementById('category-select').value = 'food';
     const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     document.getElementById('date-input').value = localDate;
@@ -651,13 +654,14 @@ function renderAll() {
     transactions.forEach(tx => {
         // Lifetime Net Worth Additions
         if (tx.type === 'saving') lifetimeSavings += tx.amount;
-        if (tx.type === 'debt_payment') lifetimeDebtPayments += tx.amount;
-
+        if (tx.type === 'refund') lifetimeSavings += tx.amount; // 환급도 통장 잔고 증가효과
+        
         // Monthly Dashboard Summaries
         const txMonth = tx.date.substring(0, 7);
         if (txMonth === currentMonth) {
             if (tx.type === 'saving') monthSavings += tx.amount;
             if (tx.type === 'expense') monthExpenses += tx.amount;
+            if (tx.type === 'refund') monthExpenses -= tx.amount; // [지출 방어 로직] 쓴 돈에서 까기
             if (tx.type === 'debt_payment') monthDebtPayments += tx.amount;
         }
     });
@@ -669,14 +673,22 @@ function renderAll() {
         if(tx.type==='expense') typeBadge = '📉 지출';
         else if(tx.type==='income') typeBadge = '📈 수입';
         else if(tx.type==='saving') typeBadge = '💰 저축';
+        else if(tx.type==='refund') typeBadge = '📈 입금/환급';
         else typeBadge = '💸 부채상환';
+
+        let displayAmount = tx.amount.toLocaleString() + '원';
+        let displayColor = (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)');
+        if (tx.type === 'refund' || tx.type === 'saving') {
+            displayAmount = '+' + tx.amount.toLocaleString() + '원';
+            displayColor = 'var(--success)'; 
+        }
 
         tr.innerHTML = 
             '<td>' + tx.date.substring(5) + '</td>' +
             '<td><strong>' + tx.merchant + '</strong><br><small>' + typeBadge + ' / ' + tx.category + '</small></td>' +
             '<td>' + tx.author + '<br><small>' + tx.sharedType + '</small></td>' +
-            '<td style="font-weight:bold; color: ' + (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)') + '">' + 
-            tx.amount.toLocaleString() + '원' +
+            '<td style="font-weight:bold; color: ' + displayColor + '">' + 
+            displayAmount + 
             '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제">&times;</button>' +
             '<button onclick="editTransaction(\'' + tx.id + '\')" class="btn-edit" title="수정" aria-label="수정" style="background:none; border:none; cursor:pointer; color:var(--primary-gold); font-size:1rem; margin-left:5px;">✏️</button>' +
             '</td>';

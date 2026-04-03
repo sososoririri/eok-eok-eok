@@ -105,11 +105,12 @@
                 </div>
 
                 <form id="transaction-form">
-                    <div class="form-group" style="display: none;">
-                        <label>유형</label>
-                        <select id="type-select" required>
-                            <option value="expense" selected>지출</option>
-                        </select>
+                    <div class="form-group">
+                        <label>기록 유형</label>
+                        <div class="radio-group" style="background-color: transparent; border: none; padding: 0;">
+                            <label style="flex:1; border: 1px solid var(--border-color); border-radius: 8px; font-weight: bold; justify-content: center; cursor: pointer;"><input type="radio" name="tx_type" value="expense" checked> 📉 지출 (돈 나감)</label>
+                            <label style="flex:1; border: 1px solid var(--border-color); border-radius: 8px; font-weight: bold; justify-content: center; cursor: pointer; color: var(--success);"><input type="radio" name="tx_type" value="refund"> 📈 N빵/환급 (돈 들어옴)</label>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -135,6 +136,7 @@
                             <option value="traffic">교통/차량</option>
                             <option value="health">의료/건강</option>
                             <option value="shopping">쇼핑/개인</option>
+                            <option value="transfer">이체/N빵/환급</option>
                             <option value="saving">저축 (프로그레스 바 반영용)</option>
                             <option value="etc">기타</option>
                         </select>
