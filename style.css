@@ -1,0 +1,359 @@
+:root {
+    --bg-color: #f7f9fa;
+    --card-bg: #ffffff;
+    --primary-navy: #1a2a3a;
+    --primary-gold: #ffd700;
+    --text-main: #333333;
+    --text-muted: #777777;
+    --border-color: #eeeeee;
+    --success: #2ecc71;
+    --danger: #e74c3c;
+    --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Pretendard', 'Outfit', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    line-height: 1.6;
+    padding-bottom: 70px; /* space for mobile nav */
+}
+
+/* Base Layout */
+#app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* Navigation - Mobile */
+#navbar {
+    background-color: var(--card-bg);
+    border-top: 1px solid var(--border-color);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+}
+
+.logo { display: none; }
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0;
+}
+
+.nav-links li { flex: 1; text-align: center; }
+
+.nav-links a {
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: 0.8rem; /* 글씨를 살짝 키우되 메뉴 개수 축소로 조절 완료됨 */
+    font-weight: 600;
+    display: block;
+    padding: 8px 4px; /* 패딩을 줄여서 한정된 폭 안에 무조건 들어가도록 보호 */
+    border-radius: 8px;
+    transition: color 0.3s;
+    cursor: pointer;
+}
+
+.nav-links a.active, .nav-links a:hover {
+    color: var(--primary-navy);
+    background-color: rgba(26, 42, 58, 0.05);
+}
+
+/* SPA Sections */
+.main-content {
+    padding: 20px;
+    flex: 1;
+}
+
+.page-section {
+    display: none;
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+.page-section.active-page {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards & Widgets */
+.section-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+}
+
+h2 {
+    font-size: 1.25rem;
+    margin-bottom: 15px;
+    color: var(--primary-navy);
+}
+
+h3 {
+    font-size: 1rem;
+    margin-bottom: 10px;
+    color: var(--text-main);
+}
+
+.list-container {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 20px;
+}
+
+/* Net Worth Widget */
+.net-worth {
+    text-align: center;
+    padding: 30px 10px;
+    background: linear-gradient(135deg, var(--primary-navy), #0f1c29);
+    border-radius: 12px;
+    color: white;
+    margin-bottom: 15px;
+}
+
+.net-worth h2 {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1rem;
+    margin-bottom: 5px;
+}
+
+.net-worth h1 {
+    font-size: 2.5rem;
+    color: var(--primary-gold);
+    margin: 10px 0;
+}
+
+.net-worth .subtitle {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* Summary Grid */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); /* 유연한 줄바꿈 허용 */
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.summary-box {
+    background: #f8f9fa;
+    padding: 12px 5px;
+    border-radius: 10px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.summary-box h4 {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+}
+
+.summary-box p {
+    font-size: 0.95rem; /* 모바일 금액 표시 깨짐 방지 축소 */
+    font-weight: 800;
+    word-break: keep-all; 
+}
+
+.income-box p { color: var(--success); }
+.expense-box p { color: var(--danger); }
+.saving-box p { color: var(--primary-navy); }
+
+/* Progress Area */
+.goal-progress {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.progress-bar-container {
+    background: var(--border-color);
+    border-radius: 10px;
+    height: 12px;
+    width: 100%;
+    margin: 10px 0;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background: var(--primary-gold);
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.5s ease-out;
+}
+
+.progress-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* Transactions Table */
+.transaction-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    white-space: nowrap; /* 좁은 모바일 화면에서 줄 넘침을 방지하고 가로 스크롤 허용 */
+}
+.list-container {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: auto; /* 테이블이 박스를 뚫고 나가는 것을 방지 */
+    -webkit-overflow-scrolling: touch; /* iOS 부드러운 스크롤 */
+}
+
+.transaction-table th, .transaction-table td {
+    padding: 10px 5px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.transaction-table th { color: var(--text-muted); font-weight: 600; }
+
+.btn-delete {
+    background: transparent;
+    border: none;
+    color: var(--danger);
+    font-size: 1.2rem;
+    cursor: pointer;
+    margin-left: 10px;
+    vertical-align: middle;
+    transition: transform 0.2s, opacity 0.2s;
+    opacity: 0.6;
+}
+.btn-delete:hover {
+    transform: scale(1.2);
+    opacity: 1;
+}
+
+/* Forms */
+.form-group { margin-bottom: 15px; }
+.form-group label {
+    display: block; font-size: 0.9rem; color: var(--primary-navy);
+    font-weight: 600; margin-bottom: 5px;
+}
+
+input[type="text"], input[type="number"], input[type="date"], select, textarea {
+    width: 100%; padding: 12px; border: 1px solid var(--border-color);
+    border-radius: 8px; font-family: inherit; font-size: 1rem;
+    outline: none; transition: border-color 0.2s;
+}
+
+input:focus, select:focus, textarea:focus { border-color: var(--primary-gold); }
+
+textarea { resize: none; background-color: #fafbfc; border: 2px solid #e1e4e8; }
+textarea:focus { border-color: var(--primary-gold); }
+
+/* 모바일에서는 1열(직렬)로, PC에선 미디어 쿼리에서 2열로 조정 */
+.form-row { display: grid; grid-template-columns: 1fr; gap: 15px; }
+
+.radio-group { display: flex; gap: 10px; flex-wrap: wrap; }
+.radio-group label { font-weight: 400; font-size: 0.85rem; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+.btn-primary {
+    background-color: var(--primary-navy); color: white; border: none;
+    border-radius: 8px; padding: 15px; width: 100%; font-size: 1rem;
+    font-weight: 600; cursor: pointer; transition: background 0.3s; margin-top: 10px;
+}
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:hover { background-color: var(--primary-gold); color: var(--primary-navy); }
+
+.budget-status { margin-top: 15px; text-align: center; font-weight: 600; color: var(--danger); font-size: 0.95rem; }
+
+fieldset.setting-group {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+fieldset.setting-group legend {
+    font-weight: 600;
+    color: var(--primary-navy);
+    padding: 0 10px;
+}
+
+/* Toast */
+.toast {
+    position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%);
+    background: var(--success); color: white; padding: 15px 30px; border-radius: 30px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-weight: 600; z-index: 1000;
+    transition: bottom 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.toast.show { bottom: 80px; }
+
+/* Desktop Styles */
+@media (min-width: 768px) {
+    body { padding-bottom: 0; }
+    #app { flex-direction: row; }
+
+    #navbar {
+        position: fixed; left: 0; top: 0; bottom: 0; width: 250px;
+        flex-direction: column; border-top: none; border-right: 1px solid var(--border-color);
+        box-shadow: none; background-color: var(--card-bg); padding: 30px 20px;
+    }
+    .logo { display: block; margin-bottom: 40px; text-align: center; }
+    .logo-text { font-size: 1.8rem; font-weight: 800; color: var(--primary-gold); }
+
+    .nav-links { flex-direction: column; gap: 15px; }
+    .nav-links li { text-align: left; }
+    .nav-links a { padding: 15px; font-size: 1rem; }
+
+    .main-content {
+        margin-left: 250px;
+        padding: 40px;
+        max-width: 1200px;
+    }
+
+    /* On PC, make Dashboard grid: charts left, list right */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    
+    .form-row { 
+        grid-template-columns: 1fr 1fr; /* PC에서는 폼을 다시 2열로 배치 */
+    }
+
+    .dashboard-grid .net-worth { grid-column: span 2; }
+    .dashboard-grid .summary-grid { grid-column: span 1; }
+    .dashboard-grid .goal-progress { grid-column: span 1; }
+    .dashboard-grid .list-container {
+        grid-column: span 2;
+    }
+    
+    /* PC Input Form full screen adjustment */
+    #input-section {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .toast.show { bottom: 40px; }
+}

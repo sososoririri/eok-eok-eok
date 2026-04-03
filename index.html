@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>억억억 - 신혼부부 자산 관리 시스템</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Pretendard:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Navigation -->
+        <nav id="navbar">
+            <div class="logo">
+                <span class="logo-text">억억억</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#dashboard" class="active" data-target="dashboard">홈</a></li>
+                <li><a href="#input-section" data-target="input-section">지출</a></li>
+                <li><a href="#income-section" data-target="income-section">수입</a></li>
+                <li><a href="#asset-section" data-target="asset-section">자산</a></li>
+                <li><a href="#settings-section" data-target="settings-section">설정</a></li>
+            </ul>
+        </nav>
+
+        <main class="main-content" id="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="page-section active-page">
+                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: var(--primary-navy);">대시보드 요약</h2>
+                    <input type="month" id="dashboard-month-filter" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;">
+                </div>
+                <div class="dashboard-grid">
+                <div class="widget net-worth">
+                    <h2>우리집 부부 순자산</h2>
+                    <h1 id="net-worth-display">0원</h1>
+                    <p class="subtitle" id="net-worth-detail">(자산합계 - 부채잔액)</p>
+                </div>
+
+                <div class="summary-grid">
+                    <div class="summary-box income-box">
+                        <h4>총 수입</h4>
+                        <p id="total-income">0원</p>
+                    </div>
+                    <div class="summary-box expense-box">
+                        <h4>총 지출</h4>
+                        <p id="total-expense">0원</p>
+                    </div>
+                    <div class="summary-box saving-box">
+                        <h4>총 저축</h4>
+                        <p id="total-saving">0원</p>
+                    </div>
+                </div>
+
+                <div class="widget goal-progress">
+                    <h3>이번 달 저축 목표 달성률</h3>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="saving-progress" style="width: 0%;"></div>
+                    </div>
+                    <div class="progress-labels">
+                        <span id="current-saving-display">현재: 0원</span>
+                        <span id="target-saving-display">목표: 0원</span>
+                        <span id="progress-percent" style="font-weight: 600; color: var(--primary-gold);">0%</span>
+                    </div>
+                </div>
+
+                <div class="widget list-container">
+                    <h3>최근 내역</h3>
+                    <table class="transaction-table">
+                        <thead>
+                            <tr>
+                                <th>날짜</th>
+                                <th>내용</th>
+                                <th>결제/성격</th>
+                                <th>금액</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transaction-list">
+                            <!-- JS will populate this -->
+                        </tbody>
+                    </table>
+                </div>
+                </div>
+            </section>
+
+            <!-- Input Section -->
+            <section id="input-section" class="page-section section-card">
+                <h2>지출/저축 내역 작성</h2>
+                
+                <div class="form-group form-paste">
+                    <label for="sms-input">알림톡 / 문자 붙여넣기</label>
+                    <textarea id="sms-input" rows="4" placeholder="결제 문자를 붙여넣으면 분석하여 아래 폼을 자동으로 채웁니다."></textarea>
+                </div>
+
+                <form id="transaction-form">
+                    <div class="form-group" style="display: none;">
+                        <label>유형</label>
+                        <select id="type-select" required>
+                            <option value="expense" selected>지출</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>결제 날짜</label>
+                        <input type="date" id="date-input" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>사용처 (어디서)</label>
+                        <input type="text" id="merchant-input" placeholder="스타벅스, 약국 등 자동/수동 입력" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>금액</label>
+                        <input type="number" id="amount-input" placeholder="숫자만 입력" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>카테고리</label>
+                        <select id="category-select" required>
+                            <option value="food">식비/외식</option>
+                            <option value="living">주거/생활</option>
+                            <option value="traffic">교통/차량</option>
+                            <option value="health">의료/건강</option>
+                            <option value="shopping">쇼핑/개인</option>
+                            <option value="saving">저축 (프로그레스 바 반영용)</option>
+                            <option value="etc">기타</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>결제자</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="author" value="소리" checked> 소리</label>
+                                <label><input type="radio" name="author" value="상혁"> 상혁</label>
+                                <label><input type="radio" name="author" value="공용"> 공용/기타</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>성격</label>
+                            <div class="radio-group">
+                                <label><input type="radio" name="shared_type" value="공용" checked> 공용</label>
+                                <label><input type="radio" name="shared_type" value="개인"> 개인</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary">저장하기</button>
+                    <p class="budget-status" id="budget-status">잔여 생활 예산 계산 중...</p>
+                </form>
+            </section>
+
+            <!-- Income Section -->
+            <section id="income-section" class="page-section section-card">
+                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: var(--primary-navy);">수입 내역 관리</h2>
+                    <input type="month" id="income-month-input" form="income-form" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;" required>
+                </div>
+                <form id="income-form">
+                    <fieldset class="setting-group" style="padding-bottom: 0;">
+                        <legend>소리님의 이번 달 수입</legend>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>월급</label>
+                                <input type="number" id="inc-sori-salary" placeholder="0">
+                            </div>
+                            <div class="form-group">
+                                <label>기타/부수입</label>
+                                <input type="number" id="inc-sori-extra" placeholder="0">
+                            </div>
+                        </div>
+                    </fieldset>
+                    <fieldset class="setting-group" style="padding-bottom: 0;">
+                        <legend>상혁님의 이번 달 수입</legend>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>월급</label>
+                                <input type="number" id="inc-sang-salary" placeholder="0">
+                            </div>
+                            <div class="form-group">
+                                <label>기타/부수입</label>
+                                <input type="number" id="inc-sang-extra" placeholder="0">
+                            </div>
+                        </div>
+                    </fieldset>
+                    <button type="submit" class="btn-primary" style="background-color: var(--success);">이 달의 수입 저장하기</button>
+                </form>
+
+                <div class="list-container" style="margin-top: 30px; box-shadow:none; border:1px solid var(--border-color);">
+                    <h3>수입 기록표</h3>
+                    <table class="transaction-table">
+                        <thead>
+                            <tr>
+                                <th>월</th>
+                                <th>소리</th>
+                                <th>상혁</th>
+                                <th>총계</th>
+                                <th style="width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="income-list">
+                            <!-- JS will populate -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Asset Section -->
+            <section id="asset-section" class="page-section section-card">
+                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: var(--primary-navy);">자산 내역 리포트</h2>
+                    <input type="month" id="asset-month-input" form="asset-form" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;" required>
+                </div>
+
+                <div class="widget" style="margin-bottom: 30px;">
+                    <canvas id="asset-chart" style="width: 100%; height: 300px;"></canvas>
+                </div>
+
+                <form id="asset-form">
+                    <p class="subtitle" style="margin-bottom: 15px;">해당 월의 자산/부채 잔고를 입력하면 순자산 그래프가 업데이트됩니다.</p>
+                    <div id="dynamic-assets-container">
+                        <!-- JS dynamically injects asset categories here -->
+                    </div>
+                    <button type="submit" class="btn-primary" style="background-color: var(--primary-gold); color: #fff;">이 달의 자산 현황 저장하기</button>
+                </form>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings-section" class="section-card page-section">
+                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: var(--primary-navy);">예산 설정</h2>
+                    <input type="month" id="budget-month-input" form="setting-form" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;" required>
+                </div>
+                <p class="subtitle" style="margin-bottom: 20px;">선택한 해당 월에 적용될 생활 예산과 저축 목표를 세팅합니다.</p>
+                <form id="setting-form">
+                    
+                    <fieldset class="setting-group">
+                        <legend>월간 예산 세팅</legend>
+                        <div class="form-group">
+                            <label>월별 생활 예산총액</label>
+                            <input type="number" id="monthly-budget-input" placeholder="예: 2000000">
+                        </div>
+                        <div class="form-group">
+                            <label>이번 달 저축 목표액</label>
+                            <input type="number" id="target-saving-input" placeholder="예: 3000000">
+                        </div>
+                    </fieldset>
+
+                    <button type="submit" class="btn-primary" style="background-color: var(--primary-navy);">이 달의 예산 적용하기</button>
+                </form>
+
+                <div class="list-container" style="margin-top: 30px; box-shadow:none; border:1px solid var(--border-color);">
+                    <h3>예산 기록표</h3>
+                    <table class="transaction-table">
+                        <thead>
+                            <tr>
+                                <th>적용 월</th>
+                                <th>생활 예산</th>
+                                <th>저축 목표</th>
+                                <th style="width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="budget-list">
+                            <!-- JS will populate -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast Message -->
+    <div id="toast" class="toast">억! 소리 나게 완료!</div>
+
+    <script src="app.js"></script>
+</body>
+</html>
