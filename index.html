@@ -2,7 +2,12 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- 모바일 앱처럼 보이게 하는 필수 태그 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1a2a3a">
     <title>억억억 - 신혼부부 자산 관리 시스템</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Pretendard:wght@400;600;800&display=swap" rel="stylesheet">
@@ -33,7 +38,7 @@
                 </div>
                 <div class="dashboard-grid">
                 <div class="widget net-worth">
-                    <h2>우리집 부부 순자산</h2>
+                    <h2>소리상혁의 순자산</h2>
                     <h1 id="net-worth-display">0원</h1>
                     <p class="subtitle" id="net-worth-detail">(자산합계 - 부채잔액)</p>
                 </div>
