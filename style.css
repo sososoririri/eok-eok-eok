@@ -263,11 +263,14 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
     width: 100%; padding: 12px; border: 1px solid var(--border-color);
     border-radius: 8px; font-family: inherit; font-size: 1rem;
     outline: none; transition: border-color 0.2s;
+    box-sizing: border-box;
+    height: 48px; /* 폼 박스들의 높이를 강제로 통일하여 모바일 날짜 박스 비대충 현상 방지 */
+    background-color: #ffffff;
 }
 
 input:focus, select:focus, textarea:focus { border-color: var(--primary-gold); }
 
-textarea { resize: none; background-color: #fafbfc; border: 2px solid #e1e4e8; }
+textarea { resize: none; background-color: #fafbfc; border: 2px solid #e1e4e8; height: auto; min-height: 100px; }
 textarea:focus { border-color: var(--primary-gold); }
 
 /* 모바일에서는 1열(직렬)로, PC에선 미디어 쿼리에서 2열로 조정 */

@@ -1,4 +1,20 @@
 // app.js
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDB_KH5ocr9IpUG3zo7h4UAUiePvlqXG54",
+    authDomain: "eok-eok-eok.firebaseapp.com",
+    projectId: "eok-eok-eok",
+    storageBucket: "eok-eok-eok.firebasestorage.app",
+    messagingSenderId: "1074375686114",
+    appId: "1:1074375686114:web:0be6221509907ddf26ebbb",
+    measurementId: "G-LYGTDV4L7M"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 
 // Schema Definition
 const assetCategories = {
@@ -32,12 +48,12 @@ const defaultSettings = {
     assets: {}
 };
 
-// Initial state
-let settings = JSON.parse(localStorage.getItem('moneyManagerSettings')) || defaultSettings;
-let transactions = JSON.parse(localStorage.getItem('moneyManagerTransactions')) || [];
-let monthlyIncomes = JSON.parse(localStorage.getItem('moneyManagerIncomes')) || {};
-let monthlyAssets = JSON.parse(localStorage.getItem('moneyManagerAssets')) || {};
-let monthlyBudgets = JSON.parse(localStorage.getItem('moneyManagerBudgets')) || {};
+// Initial state (Cloud live synced)
+let settings = defaultSettings;
+let transactions = [];
+let monthlyIncomes = {};
+let monthlyAssets = {};
+let monthlyBudgets = {};
 
 // Global Dashboard Date State
 let dashboardMonth = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().substring(0, 7);
@@ -64,8 +80,49 @@ const totalSavingEl = document.getElementById('total-saving');
 function init() {
     renderAssetUI();
     setupEventListeners();
-    renderAll();
     setupSPARouting();
+    
+    // Start Cloud Sync
+    startDatabaseSync();
+}
+
+function startDatabaseSync() {
+    // 1. Transactions Syncer
+    const q = query(collection(db, "transactions"), orderBy("timestamp", "desc"));
+    onSnapshot(q, (snapshot) => {
+        transactions = [];
+        snapshot.forEach((d) => {
+            transactions.push({ id: d.id, ...d.data() });
+        });
+        renderAll();
+    });
+
+    // 2. Incomes Syncer
+    onSnapshot(collection(db, "incomes"), (snapshot) => {
+        monthlyIncomes = {};
+        snapshot.forEach((d) => {
+            monthlyIncomes[d.id] = d.data();
+        });
+        renderAll();
+    });
+
+    // 3. Assets Syncer
+    onSnapshot(collection(db, "assets"), (snapshot) => {
+        monthlyAssets = {};
+        snapshot.forEach((d) => {
+            monthlyAssets[d.id] = d.data();
+        });
+        renderAll();
+    });
+
+    // 4. Budgets Syncer
+    onSnapshot(collection(db, "budgets"), (snapshot) => {
+        monthlyBudgets = {};
+        snapshot.forEach((d) => {
+            monthlyBudgets[d.id] = d.data();
+        });
+        renderAll();
+    });
 }
 
 function renderAssetUI() {
@@ -237,20 +294,19 @@ function loadIncomeForm(month) {
     document.getElementById('inc-sang-extra').value = data.sangEx || '';
 }
 
-function saveIncome() {
+async function saveIncome() {
     const month = document.getElementById('income-month-input').value;
     if (!month) return;
 
-    monthlyIncomes[month] = {
+    const data = {
         soriSal: Number(document.getElementById('inc-sori-salary').value) || 0,
         sangSal: Number(document.getElementById('inc-sang-salary').value) || 0,
         soriEx: Number(document.getElementById('inc-sori-extra').value) || 0,
         sangEx: Number(document.getElementById('inc-sang-extra').value) || 0
     };
     
-    localStorage.setItem('moneyManagerIncomes', JSON.stringify(monthlyIncomes));
-    showToast(month + " 수입 내역이 저장되었습니다!");
-    renderAll();
+    await setDoc(doc(db, "incomes", month), data);
+    showToast(month + " 수입 내역이 클라우드에 저장되었습니다!");
 }
 
 // Asset Form Helpers
@@ -263,7 +319,7 @@ function loadAssetForm(month) {
     });
 }
 
-function saveAssets() {
+async function saveAssets() {
     const month = document.getElementById('asset-month-input').value;
     if (!month) return;
 
@@ -274,10 +330,8 @@ function saveAssets() {
         data[id] = Number(input.value) || 0;
     });
 
-    monthlyAssets[month] = data;
-    localStorage.setItem('moneyManagerAssets', JSON.stringify(monthlyAssets));
-    showToast(month + " 자산 스냅샷이 든든하게 저장되었습니다!");
-    renderAll();
+    await setDoc(doc(db, "assets", month), data);
+    showToast(month + " 자산 스냅샷이 클라우드에 든든하게 저장되었습니다!");
 }
 
 // Smart Parsing Engine
@@ -395,7 +449,7 @@ function parseSMS() {
 }
 
 // Save Transaction
-function saveTransaction() {
+async function saveTransaction() {
     let type = document.getElementById('type-select').value;
     const date = document.getElementById('date-input').value;
     const merchant = document.getElementById('merchant-input').value;
@@ -421,14 +475,13 @@ function saveTransaction() {
         return; // do not save
     }
 
-    const newTx = {
-        id: Date.now(),
+    const newTxId = Date.now().toString();
+    const newTxData = {
         type, date, merchant, amount, category, author, sharedType,
         timestamp: new Date().toISOString()
     };
 
-    transactions.unshift(newTx);
-    localStorage.setItem('moneyManagerTransactions', JSON.stringify(transactions));
+    await setDoc(doc(db, "transactions", newTxId), newTxData);
     
     // Completely clear forms!
     smsInput.value = '';
@@ -436,47 +489,36 @@ function saveTransaction() {
     document.getElementById('merchant-input').value = '';
     document.getElementById('type-select').value = 'expense';
     document.getElementById('category-select').value = 'food';
-    
-    const today = new Date();
-    const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     document.getElementById('date-input').value = localDate;
-    
     document.querySelector('input[name="author"][value="소리"]').checked = true;
     document.querySelector('input[name="shared_type"][value="공용"]').checked = true;
 
-    showToast("억! 소리 나게 저축 완료!");
-    renderAll();
+    showToast("억! 소리 나게 클라우드 저축 완료!");
 }
 
 // Delete Transaction
-window.deleteTransaction = function(id) {
+window.deleteTransaction = async function(id) {
     if (confirm("정말 이 내역을 삭제하시겠습니까?")) {
-        transactions = transactions.filter(tx => tx.id !== id);
-        localStorage.setItem('moneyManagerTransactions', JSON.stringify(transactions));
-        renderAll();
-        showToast("내역이 삭제되었습니다.");
+        await deleteDoc(doc(db, "transactions", id.toString()));
+        showToast("내역이 클라우드에서 삭제되었습니다.");
     }
 };
 
 // Delete Income
-window.deleteIncome = function(month) {
-    if (confirm(month + " 월의 수입 기록을 모두 삭제하시겠습니까? (삭제된 수치는 대시보드와 자산계산에서 제외됩니다.)")) {
-        delete monthlyIncomes[month];
-        localStorage.setItem('moneyManagerIncomes', JSON.stringify(monthlyIncomes));
-        renderAll();
-        showToast(month + " 수입이 삭제되었습니다.");
+window.deleteIncome = async function(month) {
+    if (confirm(month + " 월의 수입 기록을 모두 삭제하시겠습니까?")) {
+        await deleteDoc(doc(db, "incomes", month));
+        showToast(month + " 수입이 클라우드에서 삭제되었습니다.");
     }
 };
 
 // Delete Budget
-window.deleteBudget = function(month) {
-    if (confirm(month + " 월의 예산 기록을 삭제하시겠습니까? (삭제 시 해당 월의 예산은 이전 달의 세팅을 따라갑니다.)")) {
-        delete monthlyBudgets[month];
-        localStorage.setItem('moneyManagerBudgets', JSON.stringify(monthlyBudgets));
-        renderAll();
+window.deleteBudget = async function(month) {
+    if (confirm(month + " 월의 예산 기록을 삭제하시겠습니까? (이전 달의 세팅을 따라갑니다)")) {
+        await deleteDoc(doc(db, "budgets", month));
         showToast(month + " 예산 설정이 삭제되었습니다.");
         
-        // If the deleted budget is the currently viewed one in the setting form, reload the form
         const currentFormMonth = document.getElementById('budget-month-input').value;
         if (currentFormMonth === month) {
             loadBudgetForm(month);
@@ -534,7 +576,7 @@ function renderAll() {
             '<td>' + tx.author + '<br><small>' + tx.sharedType + '</small></td>' +
             '<td style="font-weight:bold; color: ' + (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)') + '">' + 
             tx.amount.toLocaleString() + '원' +
-            '<button onclick="deleteTransaction(' + tx.id + ')" class="btn-delete" title="삭제" aria-label="삭제">&times;</button>' +
+            '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제">&times;</button>' +
             '</td>';
         tbody.appendChild(tr);
     });
@@ -674,18 +716,17 @@ function loadBudgetForm(month) {
 }
 
 // Settings Save (Now Monthly Budget Save)
-function saveSettings() {
+async function saveSettings() {
     const month = document.getElementById('budget-month-input').value;
     if (!month) return;
 
-    monthlyBudgets[month] = {
+    const data = {
         budget: Number(document.getElementById('monthly-budget-input').value) || 0,
         targetSaving: Number(document.getElementById('target-saving-input').value) || 0
     };
 
-    localStorage.setItem('moneyManagerBudgets', JSON.stringify(monthlyBudgets));
-    renderAll();
-    showToast(month + " 예산 설정이 안전하게 저장되었습니다!");
+    await setDoc(doc(db, "budgets", month), data);
+    showToast(month + " 예산 설정이 클라우드에 안전하게 저장되었습니다!");
 }
 
 // Toast Function
