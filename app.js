@@ -664,7 +664,7 @@ function renderAll() {
     let lifetimeDebtPayments = 0;
     
     // Current Month tracking for Dashboard Widgets
-    let monthSavings = 0;
+    let monthSavings = 0; // 자산 스냅샷 델타(비교) 값으로 할당될 예정
     let monthExpenses = 0;
     let monthDebtPayments = 0; // Fix ReferenceError
 
@@ -693,12 +693,44 @@ function renderAll() {
         // Monthly Dashboard Summaries
         const txMonth = tx.date.substring(0, 7);
         if (txMonth === currentMonth) {
-            if (tx.type === 'saving') monthSavings += tx.amount;
             if (tx.type === 'expense') monthExpenses += tx.amount;
             if (tx.type === 'refund') monthExpenses -= tx.amount; // [지출 방어 로직] 쓴 돈에서 까기
             if (tx.type === 'debt_payment') monthDebtPayments += tx.amount;
         }
     });
+
+    // --- [NEW 핵심 로직] 자산 스냅샷 기반의 '이번 달 총 저축(자산 성장)' 산출 ---
+    // 자산 그룹 중 '저축, 투자, 부동산, 연금'에 속하는 항목의 전월 대비 증가분을 '총 저축'으로 계산
+    const targetGroups = ['savings', 'investments', 'realestate', 'pension'];
+    
+    function getAssetSum(monthStr) {
+        if (!monthlyAssets[monthStr]) return 0;
+        let sum = 0;
+        targetGroups.forEach(groupKey => {
+            if (assetCategories[groupKey]) {
+                assetCategories[groupKey].items.forEach(item => {
+                    sum += (monthlyAssets[monthStr][item] || 0);
+                });
+            }
+        });
+        return sum;
+    }
+
+    // 전월 날짜(YYYY-MM) 안전하게 구하기
+    const [currY, currM] = currentMonth.split('-');
+    let prevM = parseInt(currM) - 1;
+    let prevY = parseInt(currY);
+    if(prevM === 0) { prevM = 12; prevY -= 1; }
+    const prevMonthStr = prevY + '-' + String(prevM).padStart(2, '0');
+
+    if (monthlyAssets[currentMonth] && monthlyAssets[prevMonthStr]) {
+        const currSum = getAssetSum(currentMonth);
+        const prevSum = getAssetSum(prevMonthStr);
+        monthSavings = currSum - prevSum;
+    } else {
+        // 비교할 전월 데이터가 없는 등 안전 장치
+        monthSavings = 0; 
+    }
 
     displayList.forEach(tx => {
         const tr = document.createElement('tr');
