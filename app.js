@@ -472,6 +472,10 @@ function parseSMS() {
         const rawNumbers = text.match(/(?:\s|^)(\d+[\d,]*)(?:\s|$)/);
         if (rawNumbers) {
             parsedAmount = rawNumbers[1].replace(/,/g, '');
+            // 이미 사용처에 전체 문장이 다 잡혀있다면, 사용처에서 방금 발견한 '금액' 부분은 도려냅니다!
+            if (parsedMerchant && parsedMerchant.includes(rawNumbers[1])) {
+                parsedMerchant = parsedMerchant.replace(rawNumbers[1], '').trim();
+            }
         }
     }
 
@@ -497,6 +501,8 @@ function parseSMS() {
         }
     } else {
         document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
+        // 일반 지출 메모라도 결제자를 방어적으로 세팅
+        if(!parsedAuthor) parsedAuthor = '소리';
     }
 
     // 5. Apply Values directly to inputs (Immediately reflected)
