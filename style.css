@@ -264,8 +264,16 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
     border-radius: 8px; font-family: inherit; font-size: 1rem;
     outline: none; transition: border-color 0.2s;
     box-sizing: border-box;
-    height: 48px; /* 폼 박스들의 높이를 강제로 통일하여 모바일 날짜 박스 비대충 현상 방지 */
+    height: 48px; /* 폼 박스들의 높이를 강제로 통일 */
     background-color: #ffffff;
+}
+
+input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-height: 48px; 
+    max-height: 48px;
 }
 
 input:focus, select:focus, textarea:focus { border-color: var(--primary-gold); }

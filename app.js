@@ -840,11 +840,17 @@ function renderAll() {
         }
     }
 
-    const actualAssets = baseAssetTotal + monthSavings; // Only add this month's savings to the snapshot base
-    const actualDebt = baseDebtTotal - monthDebtPayments; // Only subtract this month's debt payments
+    const actualAssets = baseAssetTotal; 
+    const actualDebt = baseDebtTotal; 
     const netWorth = actualAssets - actualDebt;
 
-    netWorthDisplay.textContent = netWorth.toLocaleString() + '원';
+    if (netWorthDisplay) netWorthDisplay.textContent = netWorth.toLocaleString() + '원';
+    
+    const totalAssetDisplay = document.getElementById('total-asset-display');
+    if (totalAssetDisplay) totalAssetDisplay.textContent = actualAssets.toLocaleString() + '원';
+    
+    const totalDebtDisplay = document.getElementById('total-debt-display');
+    if (totalDebtDisplay) totalDebtDisplay.textContent = actualDebt.toLocaleString() + '원';
 
     // Budget & Target Retrieving (Monthly Fallback)
     let currentBudgetData = { budget: 2000000, targetSaving: 1000000 };

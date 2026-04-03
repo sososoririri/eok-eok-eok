@@ -39,7 +39,7 @@
             <!-- Dashboard Section -->
             <section id="dashboard" class="page-section active-page">
                 <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: var(--primary-navy);">대시보드 요약</h2>
+                    <h2 style="margin: 0; color: var(--primary-navy);">소리상혁 가게부 대시보드</h2>
                     <input type="month" id="dashboard-month-filter" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;">
                 </div>
                 <div class="dashboard-grid">
@@ -93,7 +93,7 @@
 
             <!-- Input Section -->
             <section id="input-section" class="page-section section-card">
-                <h2>지출/저축 내역 작성</h2>
+                <h2>소비기록 작성</h2>
                 
                 <div class="form-group form-paste">
                     <label for="sms-input">알림톡 / 문자 붙여넣기</label>
@@ -216,10 +216,21 @@
                     <input type="month" id="asset-month-input" form="asset-form" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;" required>
                 </div>
 
-                <div class="widget net-worth" style="margin-bottom: 20px;">
-                    <h2>소리상혁의 순자산</h2>
-                    <h1 id="net-worth-display">0원</h1>
-                    <p class="subtitle" id="net-worth-detail">(자산합계 - 부채잔액)</p>
+                <div class="widget net-worth" style="margin-bottom: 20px; display: flex; justify-content: space-around; text-align: center; align-items: center; padding: 30px 10px;">
+                    <div style="flex: 1;">
+                        <h4 style="margin-bottom: 10px; color: rgba(255,255,255,0.7); font-size: 0.95rem; font-weight: 400;">자산 합계</h4>
+                        <h2 id="total-asset-display" style="font-size: 1.4rem; margin:0; color: #fff;">0원</h2>
+                    </div>
+                    <div style="width: 1px; height: 50px; background-color: rgba(255,255,255,0.2);"></div>
+                    <div style="flex: 1;">
+                        <h4 style="margin-bottom: 10px; color: rgba(255,255,255,0.7); font-size: 0.95rem; font-weight: 400;">부채 잔액</h4>
+                        <h2 id="total-debt-display" style="font-size: 1.4rem; margin:0; color: #ff8787;">0원</h2>
+                    </div>
+                    <div style="width: 1px; height: 50px; background-color: rgba(255,255,255,0.2);"></div>
+                    <div style="flex: 1;">
+                        <h4 style="margin-bottom: 10px; color: rgba(255,255,255,0.7); font-size: 0.95rem; font-weight: 400;">순자산</h4>
+                        <h1 id="net-worth-display" style="font-size: 1.8rem; margin:0; color: var(--primary-gold);">0원</h1>
+                    </div>
                 </div>
 
                 <div class="widget" style="margin-bottom: 30px;">
