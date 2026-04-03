@@ -418,27 +418,39 @@ function parseSMS() {
         }
     }
 
-    // Extract Merchant from remaining text heuristically
+    // Extract Merchant from remaining text heuristically (Bulletproof Line Scanner)
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
     
-    // 1) Toss Bank style marker (e.g. "결제 | 고덕드림약국")
-    const tossMatch = text.match(/결제\s*\|\s*([^\n\r]+)/);
-    // 2) Samsung Card style time marker (e.g. "17:28 서울강정형외과의")
-    const timeMatch = text.match(/\d{2}:\d{2}\s+([^\r\n]+)/);
+    for (let line of lines) {
+        // 금액이 포함된 줄(예: 10,700원 일시불, 누적1,579,160원)은 이름이 아님! 패스!
+        if (line.match(/[0-9,]+원/)) continue;
+        // 카드 승인/거절 메시지 줄은 패스!
+        if (line.includes('승인') && line.includes('삼성')) continue;
+        if (line.includes('카드')) continue;
 
-    if (tossMatch) {
-        parsedMerchant = tossMatch[1].trim();
-    } else if (timeMatch) {
-        parsedMerchant = timeMatch[1].trim();
-    } else if (amountMatch) {
-        // 3) Find the word immediately preceding the amount on the same line
-        const lines = text.split('\n');
-        for (let line of lines) {
-            if (line.includes(amountMatch[0])) {
-                const parts = line.substring(0, line.indexOf(amountMatch[0])).trim().split(/\s+/);
-                if (parts.length > 0 && parts[parts.length - 1] !== '') {
-                    parsedMerchant = parts[parts.length - 1]; // e.g. "약국 7200원" -> "약국"
-                }
+        // 시간에 섞여있는 정보 추출 (예: "04/02 12:15 풀동네판교점")
+        if (line.match(/\d{2}:\d{2}/)) {
+            let stripped = line.replace(/\d{4}-\d{2}-\d{2}/, '') // "2026-04-03" 제거
+                               .replace(/\d{2}\/\d{2}/, '')      // "04/02" 제거
+                               .replace(/\d{2}:\d{2}/, '')       // "12:15" 제거
+                               .trim();
+            // 시간/날짜를 걷어냈더니 무언가 남았다면 그게 바로 사용처!
+            if (stripped) {
+                parsedMerchant = stripped;
                 break;
+            }
+        } else {
+            // 시간조차 없고 순수 텍스트만 있는 줄 (카카오페이 / 토스뱅크 등)
+            // '결제 | 약국' 같은 형태
+            const tossMatch = line.match(/결제\s*\|\s*(.+)/);
+            if (tossMatch) {
+                parsedMerchant = tossMatch[1].trim();
+                break;
+            }
+            
+            // 일반 텍스트 줄 중 숫자 범벅이 아닌 경우
+            if (line.match(/[가-힣a-zA-Z]/) && !line.match(/\d{6,}/)) {
+                 parsedMerchant = line;
             }
         }
     }
