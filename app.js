@@ -140,7 +140,7 @@ function renderAssetUI() {
             div.className = 'form-group';
             div.innerHTML = 
                 '<label>' + item + '</label>' +
-                '<input type="number" data-asset-id="' + item + '" placeholder="0">';
+                '<input type="text" inputmode="numeric" data-asset-id="' + item + '" placeholder="0">';
             fieldset.appendChild(div);
         });
         container.appendChild(fieldset);
@@ -284,14 +284,36 @@ function setupEventListeners() {
             loadAssetForm(e.target.value);
         });
     }
+
+    // Comma formatter logic for Asset Container
+    const dynamicAssetsContainer = document.getElementById('dynamic-assets-container');
+    if (dynamicAssetsContainer) {
+        dynamicAssetsContainer.addEventListener('input', function(e) {
+            if(e.target.tagName === 'INPUT') {
+                let val = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+                e.target.value = val ? Number(val).toLocaleString() : '';
+            }
+        });
+    }
+
+    // Comma formatter logic for Incomes & Budgets
+    const numberFormatInputs = document.querySelectorAll('#inc-sori-salary, #inc-sang-salary, #inc-sori-extra, #inc-sang-extra, #monthly-budget-input, #target-saving-input, #amount-input');
+    numberFormatInputs.forEach(input => {
+        input.type = 'text';
+        input.setAttribute('inputmode', 'numeric');
+        input.addEventListener('input', function(e) {
+            let val = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+            e.target.value = val ? Number(val).toLocaleString() : '';
+        });
+    });
 }
 
 function loadIncomeForm(month) {
     const data = monthlyIncomes[month] || { soriSal: 0, sangSal: 0, soriEx: 0, sangEx: 0 };
-    document.getElementById('inc-sori-salary').value = data.soriSal || '';
-    document.getElementById('inc-sang-salary').value = data.sangSal || '';
-    document.getElementById('inc-sori-extra').value = data.soriEx || '';
-    document.getElementById('inc-sang-extra').value = data.sangEx || '';
+    document.getElementById('inc-sori-salary').value = data.soriSal ? data.soriSal.toLocaleString() : '';
+    document.getElementById('inc-sang-salary').value = data.sangSal ? data.sangSal.toLocaleString() : '';
+    document.getElementById('inc-sori-extra').value = data.soriEx ? data.soriEx.toLocaleString() : '';
+    document.getElementById('inc-sang-extra').value = data.sangEx ? data.sangEx.toLocaleString() : '';
 }
 
 async function saveIncome() {
@@ -299,10 +321,10 @@ async function saveIncome() {
     if (!month) return;
 
     const data = {
-        soriSal: Number(document.getElementById('inc-sori-salary').value) || 0,
-        sangSal: Number(document.getElementById('inc-sang-salary').value) || 0,
-        soriEx: Number(document.getElementById('inc-sori-extra').value) || 0,
-        sangEx: Number(document.getElementById('inc-sang-extra').value) || 0
+        soriSal: Number(document.getElementById('inc-sori-salary').value.replace(/,/g, '')) || 0,
+        sangSal: Number(document.getElementById('inc-sang-salary').value.replace(/,/g, '')) || 0,
+        soriEx: Number(document.getElementById('inc-sori-extra').value.replace(/,/g, '')) || 0,
+        sangEx: Number(document.getElementById('inc-sang-extra').value.replace(/,/g, '')) || 0
     };
     
     await setDoc(doc(db, "incomes", month), data);
@@ -315,7 +337,8 @@ function loadAssetForm(month) {
     const assetInputs = document.querySelectorAll('#dynamic-assets-container input[data-asset-id]');
     assetInputs.forEach(input => {
         const id = input.getAttribute('data-asset-id');
-        input.value = data[id] || 0;
+        const val = data[id] || 0;
+        input.value = val ? val.toLocaleString() : '';
     });
 }
 
@@ -327,7 +350,7 @@ async function saveAssets() {
     const assetInputs = document.querySelectorAll('#dynamic-assets-container input[data-asset-id]');
     assetInputs.forEach(input => {
         const id = input.getAttribute('data-asset-id');
-        data[id] = Number(input.value) || 0;
+        data[id] = Number(input.value.replace(/,/g, '')) || 0;
     });
 
     await setDoc(doc(db, "assets", month), data);
@@ -431,7 +454,7 @@ function parseSMS() {
     }
 
     // 5. Apply Values directly to inputs (Immediately reflected)
-    if (parsedAmount) document.getElementById('amount-input').value = parsedAmount;
+    if (parsedAmount) document.getElementById('amount-input').value = Number(parsedAmount).toLocaleString();
     if (parsedDate) {
         document.getElementById('date-input').value = parsedDate;
     } else if (!document.getElementById('date-input').value) {
@@ -453,7 +476,7 @@ async function saveTransaction() {
     let type = document.getElementById('type-select').value;
     const date = document.getElementById('date-input').value;
     const merchant = document.getElementById('merchant-input').value;
-    const amount = Number(document.getElementById('amount-input').value);
+    const amount = Number(document.getElementById('amount-input').value.replace(/,/g, ''));
     const category = document.getElementById('category-select').value;
     const author = document.querySelector('input[name="author"]:checked').value;
     const sharedType = document.querySelector('input[name="shared_type"]:checked').value;
@@ -546,6 +569,16 @@ function renderAll() {
     // Filter out transactions strictly by currentMonth for Dashboard List
     const displayTransactionsForMonth = transactions.filter(tx => tx.date.substring(0, 7) === currentMonth);
     const displayList = displayTransactionsForMonth.slice(0, 10);
+
+    // [중요 로직] 클라우드 동기화 과정에서 뷰와 실제 폼 데이터가 엇갈리는 현상을 막기 위한 데이터 주입
+    const currentAssetMonth = document.getElementById('asset-month-input')?.value;
+    if (currentAssetMonth) loadAssetForm(currentAssetMonth);
+
+    const currentIncomeMonth = document.getElementById('income-month-input')?.value;
+    if (currentIncomeMonth) loadIncomeForm(currentIncomeMonth);
+
+    const currentBudgetMonth = document.getElementById('budget-month-input')?.value;
+    if (currentBudgetMonth) loadBudgetForm(currentBudgetMonth);
 
     transactions.forEach(tx => {
         // Lifetime Net Worth Additions
@@ -711,8 +744,8 @@ function loadBudgetForm(month) {
     }
     const bInput = document.getElementById('monthly-budget-input');
     const sInput = document.getElementById('target-saving-input');
-    if (bInput) bInput.value = data.budget || '';
-    if (sInput) sInput.value = data.targetSaving || '';
+    if (bInput) bInput.value = data.budget ? data.budget.toLocaleString() : '';
+    if (sInput) sInput.value = data.targetSaving ? data.targetSaving.toLocaleString() : '';
 }
 
 // Settings Save (Now Monthly Budget Save)
@@ -721,8 +754,8 @@ async function saveSettings() {
     if (!month) return;
 
     const data = {
-        budget: Number(document.getElementById('monthly-budget-input').value) || 0,
-        targetSaving: Number(document.getElementById('target-saving-input').value) || 0
+        budget: Number(document.getElementById('monthly-budget-input').value.replace(/,/g, '')) || 0,
+        targetSaving: Number(document.getElementById('target-saving-input').value.replace(/,/g, '')) || 0
     };
 
     await setDoc(doc(db, "budgets", month), data);
