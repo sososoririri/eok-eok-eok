@@ -54,6 +54,7 @@ let transactions = [];
 let monthlyIncomes = {};
 let monthlyAssets = {};
 let monthlyBudgets = {};
+let editingTxId = null; // 수정 모드 상태 관리
 
 // Global Dashboard Date State
 let dashboardMonth = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().substring(0, 7);
@@ -422,7 +423,7 @@ function parseSMS() {
     // 1) Toss Bank style marker (e.g. "결제 | 고덕드림약국")
     const tossMatch = text.match(/결제\s*\|\s*([^\n\r]+)/);
     // 2) Samsung Card style time marker (e.g. "17:28 서울강정형외과의")
-    const timeMatch = text.match(/\d{2}:\d{2}\s+(.+)$/);
+    const timeMatch = text.match(/\d{2}:\d{2}\s+([^\r\n]+)/);
 
     if (tossMatch) {
         parsedMerchant = tossMatch[1].trim();
@@ -488,6 +489,7 @@ async function saveTransaction() {
 
     // Duplicate Check logic !!
     const isDuplicate = transactions.some(tx => 
+        tx.id !== editingTxId && // 자신이 아닌 다른 내역 중 중복 검사
         tx.date === date && 
         tx.merchant === merchant && 
         tx.amount === amount
@@ -498,15 +500,71 @@ async function saveTransaction() {
         return; // do not save
     }
 
-    const newTxId = Date.now().toString();
+    const timestamp = editingTxId ? transactions.find(t=>t.id===editingTxId).timestamp : new Date().toISOString();
+    
     const newTxData = {
         type, date, merchant, amount, category, author, sharedType,
-        timestamp: new Date().toISOString()
+        timestamp: timestamp
     };
 
-    await setDoc(doc(db, "transactions", newTxId), newTxData);
+    if (editingTxId) {
+        // 기존 덮어쓰기 로직
+        await setDoc(doc(db, "transactions", editingTxId), newTxData);
+        showToast("내역이 멋지게 수정되었습니다!");
+        window.cancelEdit();
+    } else {
+        // 신규 저장 로직
+        const newTxId = Date.now().toString();
+        await setDoc(doc(db, "transactions", newTxId), newTxData);
+        
+        // Completely clear forms!
+        smsInput.value = '';
+        document.getElementById('amount-input').value = '';
+        document.getElementById('merchant-input').value = '';
+        document.getElementById('type-select').value = 'expense';
+        document.getElementById('category-select').value = 'food';
+        const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        document.getElementById('date-input').value = localDate;
+        document.querySelector('input[name="author"][value="소리"]').checked = true;
+        document.querySelector('input[name="shared_type"][value="공용"]').checked = true;
     
-    // Completely clear forms!
+        showToast("억! 소리 나게 클라우드 저축 완료!");
+    }
+}
+
+// 수정 모드 활성화
+window.editTransaction = function(id) {
+    const tx = transactions.find(t => t.id === id);
+    if (!tx) return;
+    
+    editingTxId = id;
+    
+    // 네비게이션 시뮬레이트 (입력 탭으로 이동)
+    document.querySelector('a[data-target="input-section"]').click();
+    
+    // 정보 채우기
+    document.getElementById('type-select').value = tx.type;
+    document.getElementById('date-input').value = tx.date;
+    document.getElementById('merchant-input').value = tx.merchant;
+    document.getElementById('amount-input').value = Number(tx.amount).toLocaleString();
+    document.getElementById('category-select').value = tx.category;
+    document.querySelector(`input[name="author"][value="${tx.author}"]`).checked = true;
+    document.querySelector(`input[name="shared_type"][value="${tx.sharedType}"]`).checked = true;
+    
+    // 버튼 상태 변환
+    document.getElementById('btn-save-tx').innerText = '수정 완료';
+    const cancelBtn = document.getElementById('btn-cancel-edit');
+    if(cancelBtn) cancelBtn.style.display = 'block';
+};
+
+// 수정 취소
+window.cancelEdit = function() {
+    editingTxId = null;
+    document.getElementById('btn-save-tx').innerText = '저장하기';
+    const cancelBtn = document.getElementById('btn-cancel-edit');
+    if(cancelBtn) cancelBtn.style.display = 'none';
+    
+    // 폼 초기화
     smsInput.value = '';
     document.getElementById('amount-input').value = '';
     document.getElementById('merchant-input').value = '';
@@ -516,9 +574,7 @@ async function saveTransaction() {
     document.getElementById('date-input').value = localDate;
     document.querySelector('input[name="author"][value="소리"]').checked = true;
     document.querySelector('input[name="shared_type"][value="공용"]').checked = true;
-
-    showToast("억! 소리 나게 클라우드 저축 완료!");
-}
+};
 
 // Delete Transaction
 window.deleteTransaction = async function(id) {
@@ -610,6 +666,7 @@ function renderAll() {
             '<td style="font-weight:bold; color: ' + (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)') + '">' + 
             tx.amount.toLocaleString() + '원' +
             '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제">&times;</button>' +
+            '<button onclick="editTransaction(\'' + tx.id + '\')" class="btn-edit" title="수정" aria-label="수정" style="background:none; border:none; cursor:pointer; color:var(--primary-gold); font-size:1rem; margin-left:5px;">✏️</button>' +
             '</td>';
         tbody.appendChild(tr);
     });
