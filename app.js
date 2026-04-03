@@ -418,39 +418,39 @@ function parseSMS() {
         }
     }
 
+    // 글로벌(통합) 특수 캐치: "결제 | (사용처)" 패턴은 금액("원")과 섞여 있어도 최우선으로 잡습니다!
+    const tossGlobalMatch = text.match(/결제\s*\|\s*([^\n\r]+)/);
+    if (tossGlobalMatch) {
+         parsedMerchant = tossGlobalMatch[1].trim();
+    }
+
     // Extract Merchant from remaining text heuristically (Bulletproof Line Scanner)
     const lines = text.split('\n').map(l => l.trim()).filter(l => l);
     
-    for (let line of lines) {
-        // 금액이 포함된 줄(예: 10,700원 일시불, 누적1,579,160원)은 이름이 아님! 패스!
-        if (line.match(/[0-9,]+원/)) continue;
-        // 카드 승인/거절 메시지 줄은 패스!
-        if (line.includes('승인') && line.includes('삼성')) continue;
-        if (line.includes('카드')) continue;
+    if (!parsedMerchant) {
+        for (let line of lines) {
+            // 금액이 포함된 줄(예: 10,700원 일시불, 누적1,579,160원)은 이름이 아님! 패스!
+            if (line.match(/[0-9,]+원/)) continue;
+            // 카드 승인/거절 메시지 줄은 패스!
+            if (line.includes('승인') && line.includes('삼성')) continue;
+            if (line.includes('카드')) continue;
 
-        // 시간에 섞여있는 정보 추출 (예: "04/02 12:15 풀동네판교점")
-        if (line.match(/\d{2}:\d{2}/)) {
-            let stripped = line.replace(/\d{4}-\d{2}-\d{2}/, '') // "2026-04-03" 제거
-                               .replace(/\d{2}\/\d{2}/, '')      // "04/02" 제거
-                               .replace(/\d{2}:\d{2}/, '')       // "12:15" 제거
-                               .trim();
-            // 시간/날짜를 걷어냈더니 무언가 남았다면 그게 바로 사용처!
-            if (stripped) {
-                parsedMerchant = stripped;
-                break;
-            }
-        } else {
-            // 시간조차 없고 순수 텍스트만 있는 줄 (카카오페이 / 토스뱅크 등)
-            // '결제 | 약국' 같은 형태
-            const tossMatch = line.match(/결제\s*\|\s*(.+)/);
-            if (tossMatch) {
-                parsedMerchant = tossMatch[1].trim();
-                break;
-            }
-            
-            // 일반 텍스트 줄 중 숫자 범벅이 아닌 경우
-            if (line.match(/[가-힣a-zA-Z]/) && !line.match(/\d{6,}/)) {
-                 parsedMerchant = line;
+            // 시간에 섞여있는 정보 추출 (예: "04/02 12:15 풀동네판교점")
+            if (line.match(/\d{2}:\d{2}/)) {
+                let stripped = line.replace(/\d{4}-\d{2}-\d{2}/, '') // "2026-04-03" 제거
+                                   .replace(/\d{2}\/\d{2}/, '')      // "04/02" 제거
+                                   .replace(/\d{2}:\d{2}/, '')       // "12:15" 제거
+                                   .trim();
+                // 시간/날짜를 걷어냈더니 무언가 남았다면 그게 바로 사용처!
+                if (stripped) {
+                    parsedMerchant = stripped;
+                    break;
+                }
+            } else {
+                // 일반 텍스트 줄 중 숫자 범벅이 아닌 경우
+                if (line.match(/[가-힣a-zA-Z]/) && !line.match(/\d{6,}/)) {
+                     parsedMerchant = line;
+                }
             }
         }
     }
