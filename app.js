@@ -466,6 +466,39 @@ function parseSMS() {
         }
     }
 
+    // 4.5. 짧은 메모 파서 (N빵, 용돈 등 패턴 매치)
+    if (!parsedAmount) {
+        // '원'이 없는 단순 숫자 매칭 (예: "아빠 코스트코 엔빵 50000")
+        const rawNumbers = text.match(/(?:\s|^)(\d+[\d,]*)(?:\s|$)/);
+        if (rawNumbers) {
+            parsedAmount = rawNumbers[1].replace(/,/g, '');
+        }
+    }
+
+    const refundKeywords = ['환급', '용돈', 'n빵', '엔빵', '지원', '받음'];
+    let isRefundMemo = false;
+    for (let kw of refundKeywords) {
+        if (text.toLowerCase().includes(kw)) {
+            isRefundMemo = true;
+            break;
+        }
+    }
+
+    if (isRefundMemo) {
+        // 환급/이체 내역으로 자동 인식!
+        document.querySelector('input[name="tx_type"][value="refund"]').checked = true;
+        parsedCategory = 'transfer';
+        parsedAuthor = '공용'; // 결제자는 기본적으로 '공용/기타'
+
+        // 금액을 제외한 나머지 글자들을 사용처로 예쁘게 조합
+        if (!parsedMerchant || parsedMerchant.length === 0) {
+            let memoWithoutNumbers = text.replace(/[0-9,]+/g, '').trim();
+            parsedMerchant = memoWithoutNumbers.replace(/\s+/g, ' '); 
+        }
+    } else {
+        document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
+    }
+
     // 5. Apply Values directly to inputs (Immediately reflected)
     if (parsedAmount) document.getElementById('amount-input').value = Number(parsedAmount).toLocaleString();
     if (parsedDate) {
@@ -481,7 +514,6 @@ function parseSMS() {
     document.getElementById('category-select').value = parsedCategory;
     
     if (parsedAuthor) document.querySelector('input[name="author"][value="' + parsedAuthor + '"]').checked = true;
-    if (parsedSharedType) document.querySelector('input[name="shared_type"][value="' + parsedSharedType + '"]').checked = true;
 }
 
 // Save Transaction
@@ -492,7 +524,6 @@ async function saveTransaction() {
     const amount = Number(document.getElementById('amount-input').value.replace(/,/g, ''));
     const category = document.getElementById('category-select').value;
     const author = document.querySelector('input[name="author"]:checked').value;
-    const sharedType = document.querySelector('input[name="shared_type"]:checked').value;
 
     // 만약 카테고리가 '저축'이라면 type을 강제로 'saving'으로 맞춰줍니다.
     if (category === 'saving') {
@@ -515,7 +546,7 @@ async function saveTransaction() {
     const timestamp = editingTxId ? transactions.find(t=>t.id===editingTxId).timestamp : new Date().toISOString();
     
     const newTxData = {
-        type, date, merchant, amount, category, author, sharedType,
+        type, date, merchant, amount, category, author,
         timestamp: timestamp
     };
 
@@ -538,7 +569,6 @@ async function saveTransaction() {
         const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         document.getElementById('date-input').value = localDate;
         document.querySelector('input[name="author"][value="소리"]').checked = true;
-        document.querySelector('input[name="shared_type"][value="공용"]').checked = true;
     
         showToast("억! 소리 나게 클라우드 저축 완료!");
     }
@@ -563,8 +593,7 @@ window.editTransaction = function(id) {
     document.getElementById('merchant-input').value = tx.merchant;
     document.getElementById('amount-input').value = Number(tx.amount).toLocaleString();
     document.getElementById('category-select').value = tx.category;
-    document.querySelector(`input[name="author"][value="${tx.author}"]`).checked = true;
-    document.querySelector(`input[name="shared_type"][value="${tx.sharedType}"]`).checked = true;
+    if (tx.author) document.querySelector(`input[name="author"][value="${tx.author}"]`).checked = true;
     
     // 버튼 상태 변환
     document.getElementById('btn-save-tx').innerText = '수정 완료';
@@ -588,7 +617,6 @@ window.cancelEdit = function() {
     const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     document.getElementById('date-input').value = localDate;
     document.querySelector('input[name="author"][value="소리"]').checked = true;
-    document.querySelector('input[name="shared_type"][value="공용"]').checked = true;
 };
 
 // Delete Transaction
@@ -686,7 +714,7 @@ function renderAll() {
         tr.innerHTML = 
             '<td>' + tx.date.substring(5) + '</td>' +
             '<td><strong>' + tx.merchant + '</strong><br><small>' + typeBadge + ' / ' + tx.category + '</small></td>' +
-            '<td>' + tx.author + '<br><small>' + tx.sharedType + '</small></td>' +
+            '<td>' + (tx.author || '-') + '</td>' +
             '<td style="font-weight:bold; color: ' + displayColor + '">' + 
             displayAmount + 
             '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제">&times;</button>' +
