@@ -132,9 +132,39 @@
                             <option value="traffic">교통/차량</option>
                             <option value="health">의료/건강</option>
                             <option value="shopping">쇼핑/개인</option>
+                            <option value="saving">💰 저축 (자산 자동 반영)</option>
                             <option value="transfer">이체/N빵/환급</option>
                             <option value="etc">기타</option>
                         </select>
+                    </div>
+
+                    <!-- 저축 대상 자산 선택 (카테고리=저축일 때만 표시) -->
+                    <div class="form-group" id="saving-target-group" style="display:none; border: 2px solid var(--primary-gold); border-radius: 10px; padding: 12px; background: rgba(255,215,0,0.05);">
+                        <label style="color: var(--primary-gold); font-weight: 700;">💰 어떤 저축 항목에 넣을까요?</label>
+                        <select id="saving-target-select">
+                            <option value="">-- 자산 항목 선택 --</option>
+                            <optgroup label="소리">
+                                <option value="청년 도약_소리">청년 도약_소리</option>
+                                <option value="주택 청약_소리">주택 청약_소리</option>
+                                <option value="신한 종신보험_소리">신한 종신보험_소리</option>
+                                <option value="토스 외화 통장_소리">토스 외화 통장_소리</option>
+                                <option value="토스 자유 적금_소리">토스 자유 적금_소리</option>
+                                <option value="카카오페이증권_소리">카카오페이증권_소리</option>
+                                <option value="연금저축_소리">연금저축_소리</option>
+                            </optgroup>
+                            <optgroup label="상혁">
+                                <option value="종신 보험_상혁">종신 보험_상혁</option>
+                                <option value="주택 청약_상혁">주택 청약_상혁</option>
+                                <option value="청년 도약_상혁">청년 도약_상혁</option>
+                                <option value="개인연금저축_상혁">개인연금저축_상혁</option>
+                            </optgroup>
+                            <optgroup label="공용">
+                                <option value="경조사">경조사</option>
+                                <option value="운동,미용">운동,미용</option>
+                                <option value="예비비">예비비</option>
+                            </optgroup>
+                        </select>
+                        <small style="color: #888; margin-top: 6px; display: block;">저장 시 해당 월의 자산 스냅샷에 자동으로 금액이 추가됩니다.</small>
                     </div>
 
                     <div class="form-group">

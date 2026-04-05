@@ -40,6 +40,35 @@ const assetCategories = {
     }
 };
 
+// ============================================================
+// 📋 모임통장 자동이체 분류 딕셔너리
+// ============================================================
+
+// ✅ 저축 → 자산 자동 반영 항목
+// { keywords: [SMS에 나오는 키워드들], assetId: 자산 스냅샷의 항목 ID }
+const SAVING_KEYWORD_MAP = [
+    { keywords: ['운동', '미용'],                   assetId: '운동,미용' },
+    { keywords: ['예비비'],                          assetId: '예비비' },
+    { keywords: ['경조'],                            assetId: '경조사' },
+    { keywords: ['자유 적금', '자유적금'],            assetId: '토스 자유 적금_소리' },
+    { keywords: ['일일 주식', '카카오페이증권'],       assetId: '카카오페이증권_소리' },
+    { keywords: ['청년 도약', '청년도약'],            assetId: '청년 도약_소리' },
+    { keywords: ['주택 청약', '주택청약', '청약_소리'], assetId: '주택 청약_소리' },
+    { keywords: ['종신 보험_소리', '신한 종신'],       assetId: '신한 종신보험_소리' },
+    { keywords: ['외화 통장', '외화통장'],            assetId: '토스 외화 통장_소리' },
+    { keywords: ['종신 보험_상혁', '종신보험_상혁'],  assetId: '종신 보험_상혁' },
+    { keywords: ['청약_상혁'],                       assetId: '주택 청약_상혁' },
+    { keywords: ['도약_상혁'],                       assetId: '청년 도약_상혁' },
+    { keywords: ['개인연금'],                        assetId: '개인연금저축_상혁' },
+    { keywords: ['연금저축_소리'],                   assetId: '연금저축_소리' },
+];
+
+// ❌ 지출로만 처리 (자산 반영 X)
+const EXPENSE_KEYWORDS_LIST = [
+    '병원비', '보험료', '보험비', '상헌주식', 'KB 보험', 'KB보험',
+    '아빠', '엄마', '부모님', '경비'
+];
+
 // Default settings
 const defaultSettings = {
     monthlyBudget: 2000000,
@@ -307,6 +336,15 @@ function setupEventListeners() {
             e.target.value = val ? Number(val).toLocaleString() : '';
         });
     });
+
+    // 저축 대상 드롭다운 토글 (카테고리 변경 시)
+    const categorySelect = document.getElementById('category-select');
+    const savingTargetGroup = document.getElementById('saving-target-group');
+    if (categorySelect && savingTargetGroup) {
+        categorySelect.addEventListener('change', function() {
+            savingTargetGroup.style.display = this.value === 'saving' ? 'block' : 'none';
+        });
+    }
 }
 
 function loadIncomeForm(month) {
@@ -358,168 +396,203 @@ async function saveAssets() {
     showToast(month + " 자산 스냅샷이 클라우드에 든든하게 저장되었습니다!");
 }
 
-// Smart Parsing Engine
+// ============================================================
+// 🃏 Smart SMS Parsing Engine v2 — 카드사별 파이프라인 파서
+// ============================================================
 function parseSMS() {
-    const text = smsInput.value;
-    if (!text.trim()) return;
+    const raw = smsInput.value;
+    if (!raw.trim()) return;
+
+    // 줄바꿈 정규화 (Windows \r\n → \n)
+    const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
     let parsedAmount = null;
     let parsedDate = null;
     let parsedMerchant = null;
     let parsedAuthor = null;
-    let parsedSharedType = null;
     let parsedCategory = 'etc';
+    let parsedSavingTarget = ''; // 저축 대상 자산 항목 (자동 선택)
+    let isRefund = false;
 
-    // 1. Amount Parsing
-    // Match "154,300원" or "7200원"
-    const amountMatch = text.match(/([0-9,]+)(?:원)/);
-    if (amountMatch) {
-        parsedAmount = amountMatch[1].replace(/,/g, '');
-    }
-
-    // 2. Date Parsing
-    // Pattern: 2026-04-03
-    const fullDateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
-    // Pattern: 03/30
-    const shortDateMatch = text.match(/(\d{2})\/(\d{2})/);
-
-    if (fullDateMatch) {
-        parsedDate = fullDateMatch[0];
-    } else if (shortDateMatch) {
-        const year = new Date().getFullYear();
-        parsedDate = year + '-' + shortDateMatch[1] + '-' + shortDateMatch[2];
-    }
-
-    // 3. Keyword Mappings
-    if (text.includes('삼성카드') || text.includes('삼성') || text.includes('강*리')) {
-        parsedAuthor = '소리';
-    }
-    if (text.includes('상혁') || text.includes('이*혁')) {
-        parsedAuthor = '상혁';
-    }
-    if (text.includes('모임통장') || text.includes('부부통장')) {
-        parsedSharedType = '공용';
-    }
-
-    // 4. Category and Merchant Mapping
-    const categories = {
-        food: ['마트', '식당', '배달', '스타벅스', '커피'],
-        health: ['병원', '약국', '의원', '치과', '정형외과'],
-        traffic: ['주유', '택시', '카카오T', '교통'],
-        shopping: ['톤28', '올리브영', '쇼핑', '쿠팡']
-    };
-
-    outerLoop: for (const [cat, keywords] of Object.entries(categories)) {
-        for (let keyword of keywords) {
-            if (text.includes(keyword)) {
-                parsedCategory = cat;
-                break outerLoop;
-            }
-        }
-    }
-
-    // 글로벌(통합) 특수 캐치: "결제 | (사용처)" 패턴은 금액("원")과 섞여 있어도 최우선으로 잡습니다!
-    const tossGlobalMatch = text.match(/결제\s*\|\s*([^\n\r]+)/);
-    if (tossGlobalMatch) {
-         parsedMerchant = tossGlobalMatch[1].trim();
-    }
-
-    // Extract Merchant from remaining text heuristically (Bulletproof Line Scanner)
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-    
-    if (!parsedMerchant) {
-        for (let line of lines) {
-            // 금액이 포함된 줄(예: 10,700원 일시불, 누적1,579,160원)은 이름이 아님! 패스!
-            if (line.match(/[0-9,]+원/)) continue;
-            // 카드 승인/거절 메시지 줄은 패스!
-            if (line.includes('승인') && line.includes('삼성')) continue;
-            if (line.includes('카드')) continue;
-
-            // 시간에 섞여있는 정보 추출 (예: "04/02 12:15 풀동네판교점")
-            if (line.match(/\d{2}:\d{2}/)) {
-                let stripped = line.replace(/\d{4}-\d{2}-\d{2}/, '') // "2026-04-03" 제거
-                                   .replace(/\d{2}\/\d{2}/, '')      // "04/02" 제거
-                                   .replace(/\d{2}:\d{2}/, '')       // "12:15" 제거
-                                   .trim();
-                // 시간/날짜를 걷어냈더니 무언가 남았다면 그게 바로 사용처!
-                if (stripped) {
-                    parsedMerchant = stripped;
-                    break;
-                }
-            } else {
-                // 일반 텍스트 줄 중 숫자 범벅이 아닌 경우
-                if (line.match(/[가-힣a-zA-Z]/) && !line.match(/\d{6,}/)) {
-                     parsedMerchant = line;
-                }
-            }
-        }
-    }
-
-    // Clean up parsed merchant to remove trailing balance/accumulated info
-    if (parsedMerchant) {
-        const stopWords = ['누적', '잔액', '일시불'];
-        for (let word of stopWords) {
-            const idx = parsedMerchant.indexOf(word);
-            if (idx !== -1) {
-                parsedMerchant = parsedMerchant.substring(0, idx).trim();
-            }
-        }
-    }
-
-    // 4.5. 짧은 메모 파서 (N빵, 용돈 등 패턴 매치)
-    if (!parsedAmount) {
-        // '원'이 없는 단순 숫자 매칭 (예: "아빠 코스트코 엔빵 50000")
-        const rawNumbers = text.match(/(?:\s|^)(\d+[\d,]*)(?:\s|$)/);
-        if (rawNumbers) {
-            parsedAmount = rawNumbers[1].replace(/,/g, '');
-            // 이미 사용처에 전체 문장이 다 잡혀있다면, 사용처에서 방금 발견한 '금액' 부분은 도려냅니다!
-            if (parsedMerchant && parsedMerchant.includes(rawNumbers[1])) {
-                parsedMerchant = parsedMerchant.replace(rawNumbers[1], '').trim();
-            }
-        }
-    }
-
-    const refundKeywords = ['환급', '용돈', 'n빵', '엔빵', '지원', '받음'];
-    let isRefundMemo = false;
-    for (let kw of refundKeywords) {
-        if (text.toLowerCase().includes(kw)) {
-            isRefundMemo = true;
+    // ── 1. 금액 파싱 (잔액/누적 줄은 제외하고 첫번째 금액만 추출) ──
+    for (const line of lines) {
+        if (line.includes('잔액') || line.includes('누적')) continue;
+        const m = line.match(/([0-9,]+)원/);
+        if (m) {
+            parsedAmount = m[1].replace(/,/g, '');
             break;
         }
     }
+    // fallback: 잔액/누적 줄 포함해서 첫번째 금액
+    if (!parsedAmount) {
+        const m = text.match(/([0-9,]+)원/);
+        if (m) parsedAmount = m[1].replace(/,/g, '');
+    }
 
-    if (isRefundMemo) {
-        // 환급/이체 내역으로 자동 인식!
+    // ── 2. 날짜 파싱 ──
+    const fullDateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+    const shortDateMatch = text.match(/(\d{2})\/(\d{2})/);
+    if (fullDateMatch) {
+        parsedDate = fullDateMatch[0];
+    } else if (shortDateMatch) {
+        parsedDate = new Date().getFullYear() + '-' + shortDateMatch[1] + '-' + shortDateMatch[2];
+    }
+
+    // ── 3. 결제자 판별 ──
+    if (text.includes('강*리')) parsedAuthor = '소리';
+    if (text.includes('이*혁') || text.includes('상혁')) parsedAuthor = '상혁';
+    // 삼성카드 기본은 소리 (강*리가 없어도)
+    if (!parsedAuthor && (text.includes('삼성') && text.includes('승인'))) parsedAuthor = '소리';
+    // 공통카드 / 부부통장 / 모임통장 → 공용
+    if (text.includes('공통카드') || text.includes('부부통장') || text.includes('모임통장')) {
+        parsedAuthor = '공용';
+    }
+
+    // ── 4. 카드사별 사용처 추출 ──
+
+    // [토스뱅크] 패턴: "28,300원 결제 | 에메랄드그린(EMERALD G"
+    // → "결제 |" 뒤의 텍스트가 사용처
+    const tossMatch = text.match(/결제\s*\|\s*([^\n]+)/);
+    if (tossMatch) {
+        parsedMerchant = tossMatch[1].trim();
+    }
+
+    // [삼성카드] 패턴: 시간이 있는 줄 → "04/02 12:15 풀동네판교점"
+    if (!parsedMerchant) {
+        for (const line of lines) {
+            if (!line.match(/\d{2}:\d{2}/)) continue; // 시간 포함 줄만
+            let stripped = line
+                .replace(/\d{4}-\d{2}-\d{2}/, '')
+                .replace(/\d{2}\/\d{2}/, '')
+                .replace(/\d{2}:\d{2}/, '')
+                .trim();
+            if (stripped && stripped.match(/[가-힣a-zA-Z]/)) {
+                parsedMerchant = stripped;
+                break;
+            }
+        }
+    }
+
+    // [일반 Fallback] 줄별 스캔
+    if (!parsedMerchant) {
+        for (const line of lines) {
+            // 금액이 있는 줄 스킵 (잔액, 누적, 일시불 포함)
+            if (line.match(/[0-9,]+원/)) continue;
+            // 카드사 헤더 줄 스킵
+            if (line.match(/\[(토스뱅크|삼성|KB|신한|하나|현대|우리|카카오)/)) continue;
+            if (line.includes('카드') || line.includes('체크')) continue;
+            // 승인 메시지 줄 스킵 (이름+승인 혼합)
+            if (line.includes('승인') && (line.includes('삼성') || line.includes('카드'))) continue;
+            // 이름 줄 스킵 (홍*동, 강*리 패턴)
+            if (line.match(/[가-힣]\*[가-힣]/)) continue;
+            // 잔액/누적/날짜만 있는 줄 스킵
+            if (line.includes('잔액') || line.includes('누적')) continue;
+            if (line.match(/^\d{2}\/\d{2}$/)) continue;
+
+            if (line.match(/[가-힣a-zA-Z]/) && !line.match(/\d{6,}/) && line.length > 1) {
+                parsedMerchant = line;
+                break; // ← 첫 번째 유효한 줄에서 멈춤!
+            }
+        }
+    }
+
+    // ── 5. 사용처 클린업 (잔액/누적/일시불 꼬리 제거) ──
+    if (parsedMerchant) {
+        const stopWords = ['누적', '잔액', '일시불', '할부'];
+        for (const word of stopWords) {
+            const idx = parsedMerchant.indexOf(word);
+            if (idx !== -1) parsedMerchant = parsedMerchant.substring(0, idx).trim();
+        }
+        if (!parsedMerchant || parsedMerchant === '승인') parsedMerchant = null;
+    }
+
+    // ── 5.5. [모임통장 자동이체] 목적명 기반 자동 분류 ──
+    // "X원이 출금됐어요" 패턴이 있으면 모임통장 자동이체로 판단
+    if (parsedMerchant && (text.includes('출금됐어요') || text.includes('모임통장'))) {
+        const purposeText = parsedMerchant; // 목적명 (예비비, 운동/미용 등)
+
+        // 먼저 지출 키워드인지 체크 (병원비, 보험료 등)
+        const isKnownExpense = EXPENSE_KEYWORDS_LIST.some(kw => purposeText.includes(kw));
+
+        if (!isKnownExpense) {
+            // 저축 키워드 매핑 탐색
+            for (const { keywords, assetId } of SAVING_KEYWORD_MAP) {
+                if (keywords.some(kw => purposeText.includes(kw))) {
+                    parsedCategory = 'saving';
+                    parsedSavingTarget = assetId;
+                    break;
+                }
+            }
+        }
+        // 지출 키워드도 아니고 저축 매핑도 없으면 → 기타 지출로
+    }
+
+    // ── 6. 카테고리 자동 매핑 ──
+    const categoryMap = {
+        food: ['마트', '식당', '배달', '스타벅스', '커피', 'GS25', 'CU', '세븐일레븐', '편의점', '카페', '치킨', '피자'],
+        health: ['병원', '약국', '의원', '치과', '정형외과', '한의원'],
+        traffic: ['주유', '택시', '카카오T', '교통', 'GS칼텍스', '주차'],
+        shopping: ['톤28', '올리브영', '쇼핑', '쿠팡', '무신사', 'H&M', 'ZARA'],
+        living: ['월세', '관리비', '전기', '가스', '수도', '인터넷']
+    };
+    const checkText = text + (parsedMerchant || '');
+    outer: for (const [cat, keywords] of Object.entries(categoryMap)) {
+        for (const kw of keywords) {
+            if (checkText.includes(kw)) { parsedCategory = cat; break outer; }
+        }
+    }
+
+    // ── 7. 간편 메모 파서 (원 없는 숫자, N빵/용돈) ──
+    if (!parsedAmount) {
+        const rawNum = text.match(/(?:^|\s)([0-9][0-9,]*)(?:\s|$)/);
+        if (rawNum) {
+            parsedAmount = rawNum[1].replace(/,/g, '');
+            if (parsedMerchant && parsedMerchant.includes(rawNum[1])) {
+                parsedMerchant = parsedMerchant.replace(rawNum[1], '').trim();
+            }
+        }
+    }
+
+    // ── 8. 환급/N빵 감지 ──
+    const refundKeywords = ['환급', '용돈', 'n빵', '엔빵', '지원', '받음'];
+    isRefund = refundKeywords.some(kw => text.toLowerCase().includes(kw));
+
+    if (isRefund) {
         document.querySelector('input[name="tx_type"][value="refund"]').checked = true;
         parsedCategory = 'transfer';
-        parsedAuthor = '공용'; // 결제자는 기본적으로 '공용/기타'
-
-        // 금액을 제외한 나머지 글자들을 사용처로 예쁘게 조합
-        if (!parsedMerchant || parsedMerchant.length === 0) {
-            let memoWithoutNumbers = text.replace(/[0-9,]+/g, '').trim();
-            parsedMerchant = memoWithoutNumbers.replace(/\s+/g, ' '); 
+        if (!parsedAuthor) parsedAuthor = '공용';
+        if (!parsedMerchant) {
+            parsedMerchant = text.replace(/[0-9,]+/g, '').trim().replace(/\s+/g, ' ');
         }
     } else {
         document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
-        // 일반 지출 메모라도 결제자를 방어적으로 세팅
-        if(!parsedAuthor) parsedAuthor = '소리';
+        if (!parsedAuthor) parsedAuthor = '소리';
     }
 
-    // 5. Apply Values directly to inputs (Immediately reflected)
+    // ── 9. 폼에 값 적용 ──
     if (parsedAmount) document.getElementById('amount-input').value = Number(parsedAmount).toLocaleString();
+
     if (parsedDate) {
         document.getElementById('date-input').value = parsedDate;
     } else if (!document.getElementById('date-input').value) {
-        // 문자에 날짜가 없고, 인풋이 비어있다면 로컬 오늘 날짜로 방어 세팅
         const today = new Date();
-        const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-        document.getElementById('date-input').value = localDate;
+        document.getElementById('date-input').value =
+            new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().split('T')[0];
     }
-    
-    if (parsedMerchant && parsedMerchant !== '승인') document.getElementById('merchant-input').value = parsedMerchant;
+
+    if (parsedMerchant) document.getElementById('merchant-input').value = parsedMerchant;
     document.getElementById('category-select').value = parsedCategory;
-    
-    if (parsedAuthor) document.querySelector('input[name="author"][value="' + parsedAuthor + '"]').checked = true;
+    // 저축 대상 드롭다운 토글 + 자동 선택
+    const saving_group = document.getElementById('saving-target-group');
+    const saving_target_sel = document.getElementById('saving-target-select');
+    if (saving_group) saving_group.style.display = parsedCategory === 'saving' ? 'block' : 'none';
+    if (saving_target_sel && parsedSavingTarget) saving_target_sel.value = parsedSavingTarget;
+
+    if (parsedAuthor) {
+        const radio = document.querySelector('input[name="author"][value="' + parsedAuthor + '"]');
+        if (radio) radio.checked = true;
+    }
 }
 
 // Save Transaction
@@ -530,53 +603,74 @@ async function saveTransaction() {
     const amount = Number(document.getElementById('amount-input').value.replace(/,/g, ''));
     const category = document.getElementById('category-select').value;
     const author = document.querySelector('input[name="author"]:checked').value;
+    const savingTarget = document.getElementById('saving-target-select')?.value || '';
 
-    // 만약 카테고리가 '저축'이라면 type을 강제로 'saving'으로 맞춰줍니다.
+    // 카테고리가 '저축'이라면 type을 강제로 'saving'으로 맞춰줍니다.
     if (category === 'saving') {
         type = 'saving';
     }
 
+    // 저축인데 자산 항목 선택 안 한 경우 경고
+    if (type === 'saving' && !savingTarget) {
+        alert('💰 저축 항목에 반영할 자산을 선택해주세요!');
+        return;
+    }
+
     // Duplicate Check logic !!
     const isDuplicate = transactions.some(tx => 
-        tx.id !== editingTxId && // 자신이 아닌 다른 내역 중 중복 검사
+        tx.id !== editingTxId &&
         tx.date === date && 
         tx.merchant === merchant && 
         tx.amount === amount
     );
 
     if (isDuplicate) {
-        alert("⚠️ 이미 동일한 내역이 등록되어 있습니다! (날짜, 사용처, 금액 일치)");
-        return; // do not save
+        alert('⚠️ 이미 동일한 내역이 등록되어 있습니다! (날짜, 사용처, 금액 일치)');
+        return;
     }
 
     const timestamp = editingTxId ? transactions.find(t=>t.id===editingTxId).timestamp : new Date().toISOString();
     
     const newTxData = {
         type, date, merchant, amount, category, author,
-        timestamp: timestamp
+        savingTarget: type === 'saving' ? savingTarget : '',
+        timestamp
     };
 
     if (editingTxId) {
-        // 기존 덮어쓰기 로직
-        await setDoc(doc(db, "transactions", editingTxId), newTxData);
-        showToast("내역이 멋지게 수정되었습니다!");
+        await setDoc(doc(db, 'transactions', editingTxId), newTxData);
+        showToast('내역이 멋지게 수정되었습니다!');
         window.cancelEdit();
     } else {
-        // 신규 저장 로직
         const newTxId = Date.now().toString();
-        await setDoc(doc(db, "transactions", newTxId), newTxData);
+        await setDoc(doc(db, 'transactions', newTxId), newTxData);
+
+        // ── 저축 자동 자산 반영 ──
+        if (type === 'saving' && savingTarget) {
+            const txMonth = date.substring(0, 7); // YYYY-MM
+            const currentSnap = monthlyAssets[txMonth] || {};
+            const updatedSnap = { ...currentSnap };
+            // 해당 자산 항목에 금액 누적
+            updatedSnap[savingTarget] = (Number(updatedSnap[savingTarget]) || 0) + amount;
+            await setDoc(doc(db, 'assets', txMonth), updatedSnap);
+            showToast('💰 ' + savingTarget + '에 ' + amount.toLocaleString() + '원 자동 반영 완료!');
+        } else {
+            showToast('억! 소리 나게 클라우드 저장 완료!');
+        }
         
-        // Completely clear forms!
+        // 폼 초기화
         smsInput.value = '';
         document.getElementById('amount-input').value = '';
         document.getElementById('merchant-input').value = '';
-        document.getElementById('type-select').value = 'expense';
         document.getElementById('category-select').value = 'food';
         const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         document.getElementById('date-input').value = localDate;
         document.querySelector('input[name="author"][value="소리"]').checked = true;
-    
-        showToast("억! 소리 나게 클라우드 저축 완료!");
+        document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
+        const savingGroup = document.getElementById('saving-target-group');
+        if (savingGroup) savingGroup.style.display = 'none';
+        const savingTargetSel = document.getElementById('saving-target-select');
+        if (savingTargetSel) savingTargetSel.value = '';
     }
 }
 
