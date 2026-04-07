@@ -840,8 +840,8 @@ function renderAll() {
         // 카테고리 한글 표시
         const catLabels = {
             food: '식비/외식', living: '주거/생활', traffic: '교통/차량',
-            health: '의료/건강', shopping: '쇼핑/개인', insurance: '🛡️보험',
-            saving: '💰저축', transfer: '이체/환급', etc: '기타'
+            health: '의료/건강', shopping: '쇼핑/개인', insurance: '보험',
+            gift: '선물', saving: '💰저축', transfer: '이체/환급', etc: '기타'
         };
         const catLabel = catLabels[tx.category] || tx.category;
 
