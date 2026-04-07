@@ -591,6 +591,26 @@ function parseSMS() {
     if (!parsedAuthor) parsedAuthor = '소리';
 
     // ── 9. 폼에 값 적용 ──
+
+    // 하이라이트: 월급/부수입 유형이면 수입 메뉴로 자동 이동
+    if (parsedType === 'income') {
+        const targetMonth = parsedDate ? parsedDate.substring(0, 7) : dashboardMonth;
+        switchToSection('income-section');
+        const incomeMonthInput = document.getElementById('income-month-input');
+        if (incomeMonthInput) {
+            incomeMonthInput.value = targetMonth;
+            loadIncomeForm(targetMonth);
+        }
+        const isExtra = text.includes('부수입') || text.includes('기타수입');
+        const fieldId = parsedAuthor === '상혁'
+            ? (isExtra ? 'inc-sang-extra' : 'inc-sang-salary')
+            : (isExtra ? 'inc-sori-extra' : 'inc-sori-salary');
+        const fieldEl = document.getElementById(fieldId);
+        if (fieldEl && parsedAmount) fieldEl.value = Number(parsedAmount).toLocaleString();
+        smsInput.value = '';
+        return; // 소비기록 폼 채우지 않음
+    }
+
     if (parsedAmount) document.getElementById('amount-input').value = Number(parsedAmount).toLocaleString();
 
     if (parsedDate) {
@@ -855,46 +875,64 @@ function renderAll() {
         monthSavings = 0; 
     }
 
+    // 날짜별 그룹화
+    const dateGroups = {};
     displayList.forEach(tx => {
-        const tr = document.createElement('tr');
-        
-        let typeBadge = '';
-        if(tx.type==='expense') typeBadge = '지출';
-        else if(tx.type==='income') typeBadge = '입금';
-        else if(tx.type==='saving') typeBadge = '💰저축';
-        else if(tx.type==='refund') typeBadge = '환급';
-        else typeBadge = '기타';
+        if (!dateGroups[tx.date]) dateGroups[tx.date] = [];
+        dateGroups[tx.date].push(tx);
+    });
+    const sortedDates = Object.keys(dateGroups).sort().reverse();
 
-        // 카테고리 한글 표시
-        const catLabels = {
-            food: '식비', living: '주거', traffic: '교통',
-            health: '의료', shopping: '쇼핑', insurance: '보험',
-            gift: '선물', transfer: '이체', etc: '기타'
-        };
-        const catLabel = catLabels[tx.category] || tx.category;
+    sortedDates.forEach(dateStr => {
+        // 날짜 헤더 행
+        const headerTr = document.createElement('tr');
+        const mm = dateStr.substring(5, 7);
+        const dd = dateStr.substring(8, 10);
+        const dayNames = ['일','월','화','수','목','금','토'];
+        const dayOfWeek = dayNames[new Date(dateStr).getDay()];
+        headerTr.innerHTML = '<td colspan="2" style="' +
+            'background:var(--bg-color); color:var(--primary-navy); font-weight:700; ' +
+            'font-size:0.78rem; padding:8px 4px 4px; border-bottom:2px solid var(--primary-gold)' +
+            '">' + mm + '월 ' + dd + '일 (' + dayOfWeek + ')</td>';
+        tbody.appendChild(headerTr);
 
-        let displayAmount = tx.amount.toLocaleString() + '원';
-        let displayColor = (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)');
-        if (tx.type === 'income') displayColor = 'var(--success)';
-        if (tx.type === 'refund' || tx.type === 'saving') {
-            displayAmount = '+' + tx.amount.toLocaleString() + '원';
-            displayColor = 'var(--success)';
-        }
+        dateGroups[dateStr].forEach(tx => {
+            const tr = document.createElement('tr');
 
-        // 저자 한글자로 줄이기 (소리→소, 상혁→혁, 공용→공)
-        const authorShort = {'소리':'소리','상혁':'상혁','공용':'공용'}[tx.author] || (tx.author||'-');
+            let typeBadge = '';
+            if(tx.type==='expense') typeBadge = '📉 지출';
+            else if(tx.type==='income') typeBadge = '📈 월급/부수입';
+            else if(tx.type==='saving') typeBadge = '💰 저축';
+            else if(tx.type==='refund') typeBadge = '💵 환급';
+            else typeBadge = '기타';
 
-        tr.innerHTML =
-            '<td style="font-size:0.8rem; color:var(--text-muted)">' + tx.date.substring(5) + '</td>' +
-            '<td><strong style="font-size:0.88rem">' + tx.merchant + '</strong>' +
-            '<br><small style="color:var(--text-muted); font-size:0.75rem">' + typeBadge + ' · ' + catLabel + ' · ' + authorShort + '</small></td>' +
-            '<td style="font-weight:bold; color:' + displayColor + '; font-size:0.85rem; text-align:right; vertical-align:middle">' +
-            displayAmount +
-            '<br><span style="display:inline-flex; gap:2px; justify-content:flex-end">' +
-            '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제" style="font-size:0.9rem; margin:0">&times;</button>' +
-            '<button onclick="editTransaction(\'' + tx.id + '\')" class="btn-edit" title="수정" aria-label="수정" style="background:none; border:none; cursor:pointer; color:var(--primary-gold); font-size:0.85rem; padding:0">✏️</button>' +
-            '</span></td>';
-        tbody.appendChild(tr);
+            const catLabels = {
+                food: '식비', living: '주거', traffic: '교통',
+                health: '의료', shopping: '쇼핑', insurance: '보험',
+                gift: '선물', transfer: '이체', etc: '기타'
+            };
+            const catLabel = catLabels[tx.category] || tx.category;
+
+            let displayAmount = tx.amount.toLocaleString() + '원';
+            let displayColor = (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)');
+            if (tx.type === 'refund' || tx.type === 'saving' || tx.type === 'income') {
+                displayAmount = '+' + tx.amount.toLocaleString() + '원';
+                displayColor = 'var(--success)';
+            }
+
+            const authorShort = tx.author || '-';
+
+            tr.innerHTML =
+                '<td><strong style="font-size:0.88rem">' + tx.merchant + '</strong>' +
+                '<br><small style="color:var(--text-muted); font-size:0.75rem">' + typeBadge + ' · ' + catLabel + ' · ' + authorShort + '</small></td>' +
+                '<td style="font-weight:bold; color:' + displayColor + '; font-size:0.85rem; text-align:right; vertical-align:middle">' +
+                displayAmount +
+                '<br><span style="display:inline-flex; gap:2px; justify-content:flex-end">' +
+                '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제" style="font-size:0.9rem; margin:0">&times;</button>' +
+                '<button onclick="editTransaction(\'' + tx.id + '\')" class="btn-edit" title="수정" aria-label="수정" style="background:none; border:none; cursor:pointer; color:var(--primary-gold); font-size:0.85rem; padding:0">✏️</button>' +
+                '</span></td>';
+            tbody.appendChild(tr);
+        });
     });
     transactionList.appendChild(tbody);
 

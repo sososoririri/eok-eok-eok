@@ -218,14 +218,58 @@ h3 {
 .transaction-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
-    white-space: nowrap; /* 좁은 모바일 화면에서 줄 넘침을 방지하고 가로 스크롤 허용 */
+    font-size: 0.82rem;
+    table-layout: fixed; /* 모바일: 컬럼 너비 고정으로 가로 스크롤 방지 */
+}
+.transaction-table col.col-date { width: 44px; }
+.transaction-table col.col-content { width: auto; }
+.transaction-table col.col-amount { width: 90px; }
+
+.transaction-table td:nth-child(1) { /* 날짜 */
+    white-space: nowrap;
+    width: 44px;
+    padding-right: 4px;
+}
+.transaction-table td:nth-child(2) { /* 내용 */
+    word-break: break-all;
+    overflow: hidden;
+}
+.transaction-table td:nth-child(3) { /* 금액 */
+    white-space: nowrap;
+    text-align: right;
+    width: 90px;
 }
 .list-container {
     width: 100%;
-    max-width: 100vw;
-    overflow-x: auto; /* 테이블이 박스를 뚫고 나가는 것을 방지 */
-    -webkit-overflow-scrolling: touch; /* iOS 부드러운 스크롤 */
+    overflow-x: hidden; /* 가로 스크롤 완전 제거 */
+}
+
+/* 대시보드 타입 필터 바 */
+.type-filter-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.filter-btn {
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1.5px solid var(--primary-gold);
+    background: #ffffff;
+    color: var(--primary-navy);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+.filter-btn.active {
+    background: var(--primary-gold);
+    color: var(--primary-navy);
+    border-color: var(--primary-gold);
+}
+.filter-btn:hover:not(.active) {
+    background: rgba(255,215,0,0.1);
 }
 
 .transaction-table th, .transaction-table td {
@@ -358,6 +402,15 @@ fieldset.setting-group legend {
     .dashboard-grid .goal-progress { grid-column: span 1; }
     .dashboard-grid .list-container {
         grid-column: span 2;
+    }
+
+    /* PC: 테이블 자연 너비로 (fixed 과속한 여백 제거) */
+    .transaction-table {
+        table-layout: auto;
+    }
+    .transaction-table th:last-child,
+    .transaction-table td:last-child {
+        width: 130px;
     }
     
     /* PC Input Form full screen adjustment */
