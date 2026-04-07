@@ -532,9 +532,10 @@ function parseSMS() {
     const categoryMap = {
         food: ['마트', '식당', '배달', '스타벅스', '커피', 'GS25', 'CU', '세븐일레븐', '편의점', '카페', '치킨', '피자'],
         health: ['병원', '약국', '의원', '치과', '정형외과', '한의원'],
-        traffic: ['주유', '택시', '카카오T', '교통', 'GS칼텍스', '주차'],
+        traffic: ['주유', '택시', '카카오T', '교통', 'GS칼텍스', '주차', 'BNK캐피탈', 'BNK캐피'],
         shopping: ['톤28', '올리브영', '쇼핑', '쿠팡', '무신사', 'H&M', 'ZARA'],
-        living: ['월세', '관리비', '전기', '가스', '수도', '인터넷']
+        living: ['월세', '관리비', '전기', '가스', '수도', '인터넷'],
+        insurance: ['프리드L010', '삼성화04061', '메리츠통합001', '삼성화04014', '삼성화04076', 'DB손07804', '삼생04002건', '프리드L', '삼성화0', 'DB손0', '메리츠통합']
     };
     const checkText = text + (parsedMerchant || '');
     outer: for (const [cat, keywords] of Object.entries(categoryMap)) {
@@ -767,7 +768,7 @@ function renderAll() {
     
     // Filter out transactions strictly by currentMonth for Dashboard List
     const displayTransactionsForMonth = transactions.filter(tx => tx.date.substring(0, 7) === currentMonth);
-    const displayList = displayTransactionsForMonth.slice(0, 10);
+    const displayList = displayTransactionsForMonth; // 월별 전체 내역 표시 (제한 없음)
 
     // [중요 로직] 클라우드 동기화 과정에서 뷰와 실제 폼 데이터가 엇갈리는 현상을 막기 위한 데이터 주입
     const currentAssetMonth = document.getElementById('asset-month-input')?.value;
@@ -836,6 +837,14 @@ function renderAll() {
         else if(tx.type==='refund') typeBadge = '📈 입금/환급';
         else typeBadge = '💸 부채상환';
 
+        // 카테고리 한글 표시
+        const catLabels = {
+            food: '식비/외식', living: '주거/생활', traffic: '교통/차량',
+            health: '의료/건강', shopping: '쇼핑/개인', insurance: '🛡️보험',
+            saving: '💰저축', transfer: '이체/환급', etc: '기타'
+        };
+        const catLabel = catLabels[tx.category] || tx.category;
+
         let displayAmount = tx.amount.toLocaleString() + '원';
         let displayColor = (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)');
         if (tx.type === 'refund' || tx.type === 'saving') {
@@ -845,7 +854,7 @@ function renderAll() {
 
         tr.innerHTML = 
             '<td>' + tx.date.substring(5) + '</td>' +
-            '<td><strong>' + tx.merchant + '</strong><br><small>' + typeBadge + ' / ' + tx.category + '</small></td>' +
+            '<td><strong>' + tx.merchant + '</strong><br><small>' + typeBadge + ' / ' + catLabel + '</small></td>' +
             '<td>' + (tx.author || '-') + '</td>' +
             '<td style="font-weight:bold; color: ' + displayColor + '">' + 
             displayAmount + 
