@@ -84,6 +84,7 @@ let monthlyIncomes = {};
 let monthlyAssets = {};
 let monthlyBudgets = {};
 let editingTxId = null; // 수정 모드 상태 관리
+let dashboardTypeFilter = 'all'; // 대시보드 타입 필터 ('all'|'expense'|'refund'|'income'|'saving')
 
 // Global Dashboard Date State
 let dashboardMonth = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().substring(0, 7);
@@ -337,14 +338,23 @@ function setupEventListeners() {
         });
     });
 
-    // 저축 대상 드롭다운 토글 (카테고리 변경 시)
-    const categorySelect = document.getElementById('category-select');
+    // 저축 대상 드롭다운 토글 → 기록유형(tx_type) 변경 시
     const savingTargetGroup = document.getElementById('saving-target-group');
-    if (categorySelect && savingTargetGroup) {
-        categorySelect.addEventListener('change', function() {
-            savingTargetGroup.style.display = this.value === 'saving' ? 'block' : 'none';
+    document.querySelectorAll('input[name="tx_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (savingTargetGroup) savingTargetGroup.style.display = this.value === 'saving' ? 'block' : 'none';
         });
-    }
+    });
+
+    // 대시보드 타입 필터 버튼
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            dashboardTypeFilter = this.getAttribute('data-filter');
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            renderAll();
+        });
+    });
 }
 
 function loadIncomeForm(month) {
@@ -412,6 +422,7 @@ function parseSMS() {
     let parsedMerchant = null;
     let parsedAuthor = null;
     let parsedCategory = 'etc';
+    let parsedType = null; // 'expense'|'refund'|'income'|'saving' 자동 감지
     let parsedSavingTarget = ''; // 저축 대상 자산 항목 (자동 선택)
     let isRefund = false;
 
@@ -516,10 +527,10 @@ function parseSMS() {
         const isKnownExpense = EXPENSE_KEYWORDS_LIST.some(kw => purposeText.includes(kw));
 
         if (!isKnownExpense) {
-            // 저축 키워드 매핑 탐색
+            // 저축 키워드 매핑 탐색 → type=saving으로 처리
             for (const { keywords, assetId } of SAVING_KEYWORD_MAP) {
                 if (keywords.some(kw => purposeText.includes(kw))) {
-                    parsedCategory = 'saving';
+                    parsedType = 'saving'; // 카테고리 아닌 유형으로 저장
                     parsedSavingTarget = assetId;
                     break;
                 }
@@ -555,21 +566,29 @@ function parseSMS() {
         }
     }
 
-    // ── 8. 환급/N빵 감지 ──
+    // ── 8. 유형 자동 감지 (환급 / 입금 / 저축 / 지출) ──
     const refundKeywords = ['환급', '용돈', 'n빵', '엔빵', '지원', '받음'];
+    const incomeKeywords = ['월급', '급여', '부수입', '월급입금', '급여입금'];
     isRefund = refundKeywords.some(kw => text.toLowerCase().includes(kw));
+    const isIncome = !isRefund && incomeKeywords.some(kw => text.includes(kw));
 
-    if (isRefund) {
-        document.querySelector('input[name="tx_type"][value="refund"]').checked = true;
+    if (parsedType === 'saving') {
+        // 모임통장 저축 자동분류 → 저축 유형
+        // (이미 parsedType 세팅됨)
+    } else if (isRefund) {
+        parsedType = 'refund';
         parsedCategory = 'transfer';
         if (!parsedAuthor) parsedAuthor = '공용';
         if (!parsedMerchant) {
             parsedMerchant = text.replace(/[0-9,]+/g, '').trim().replace(/\s+/g, ' ');
         }
+    } else if (isIncome) {
+        parsedType = 'income';
+        parsedCategory = 'transfer';
     } else {
-        document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
-        if (!parsedAuthor) parsedAuthor = '소리';
+        parsedType = 'expense';
     }
+    if (!parsedAuthor) parsedAuthor = '소리';
 
     // ── 9. 폼에 값 적용 ──
     if (parsedAmount) document.getElementById('amount-input').value = Number(parsedAmount).toLocaleString();
@@ -583,11 +602,19 @@ function parseSMS() {
     }
 
     if (parsedMerchant) document.getElementById('merchant-input').value = parsedMerchant;
-    document.getElementById('category-select').value = parsedCategory;
+
+    // 카테고리 세팅 (saving은 이제 category에 없으므로 etc로 대체)
+    const catSelectEl = document.getElementById('category-select');
+    if (catSelectEl) catSelectEl.value = parsedCategory !== 'saving' ? parsedCategory : 'etc';
+
+    // 기록 유형 라디오 세팅 (parsedType 기반)
+    const typeRadio = document.querySelector('input[name="tx_type"][value="' + parsedType + '"]');
+    if (typeRadio) typeRadio.checked = true;
+
     // 저축 대상 드롭다운 토글 + 자동 선택
     const saving_group = document.getElementById('saving-target-group');
     const saving_target_sel = document.getElementById('saving-target-select');
-    if (saving_group) saving_group.style.display = parsedCategory === 'saving' ? 'block' : 'none';
+    if (saving_group) saving_group.style.display = parsedType === 'saving' ? 'block' : 'none';
     if (saving_target_sel && parsedSavingTarget) saving_target_sel.value = parsedSavingTarget;
 
     if (parsedAuthor) {
@@ -606,10 +633,8 @@ async function saveTransaction() {
     const author = document.querySelector('input[name="author"]:checked').value;
     const savingTarget = document.getElementById('saving-target-select')?.value || '';
 
-    // 카테고리가 '저축'이라면 type을 강제로 'saving'으로 맞춰줍니다.
-    if (category === 'saving') {
-        type = 'saving';
-    }
+    // (구) category=saving → type 강제 변환 로직 제거됨
+    // 이제 tx_type 라디오에서 직접 선택
 
     // 저축인데 자산 항목 선택 안 한 경우 경고
     if (type === 'saving' && !savingTarget) {
@@ -768,7 +793,10 @@ function renderAll() {
     
     // Filter out transactions strictly by currentMonth for Dashboard List
     const displayTransactionsForMonth = transactions.filter(tx => tx.date.substring(0, 7) === currentMonth);
-    const displayList = displayTransactionsForMonth; // 월별 전체 내역 표시 (제한 없음)
+    // 타입 필터 적용
+    const displayList = dashboardTypeFilter === 'all'
+        ? displayTransactionsForMonth
+        : displayTransactionsForMonth.filter(tx => tx.type === dashboardTypeFilter);
 
     // [중요 로직] 클라우드 동기화 과정에서 뷰와 실제 폼 데이터가 엇갈리는 현상을 막기 위한 데이터 주입
     const currentAssetMonth = document.getElementById('asset-month-input')?.value;
@@ -831,36 +859,41 @@ function renderAll() {
         const tr = document.createElement('tr');
         
         let typeBadge = '';
-        if(tx.type==='expense') typeBadge = '📉 지출';
-        else if(tx.type==='income') typeBadge = '📈 수입';
-        else if(tx.type==='saving') typeBadge = '💰 저축';
-        else if(tx.type==='refund') typeBadge = '📈 입금/환급';
-        else typeBadge = '💸 부채상환';
+        if(tx.type==='expense') typeBadge = '지출';
+        else if(tx.type==='income') typeBadge = '입금';
+        else if(tx.type==='saving') typeBadge = '💰저축';
+        else if(tx.type==='refund') typeBadge = '환급';
+        else typeBadge = '기타';
 
         // 카테고리 한글 표시
         const catLabels = {
-            food: '식비/외식', living: '주거/생활', traffic: '교통/차량',
-            health: '의료/건강', shopping: '쇼핑/개인', insurance: '보험',
-            gift: '선물', saving: '💰저축', transfer: '이체/환급', etc: '기타'
+            food: '식비', living: '주거', traffic: '교통',
+            health: '의료', shopping: '쇼핑', insurance: '보험',
+            gift: '선물', transfer: '이체', etc: '기타'
         };
         const catLabel = catLabels[tx.category] || tx.category;
 
         let displayAmount = tx.amount.toLocaleString() + '원';
         let displayColor = (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)');
+        if (tx.type === 'income') displayColor = 'var(--success)';
         if (tx.type === 'refund' || tx.type === 'saving') {
             displayAmount = '+' + tx.amount.toLocaleString() + '원';
-            displayColor = 'var(--success)'; 
+            displayColor = 'var(--success)';
         }
 
-        tr.innerHTML = 
-            '<td>' + tx.date.substring(5) + '</td>' +
-            '<td><strong>' + tx.merchant + '</strong><br><small>' + typeBadge + ' / ' + catLabel + '</small></td>' +
-            '<td>' + (tx.author || '-') + '</td>' +
-            '<td style="font-weight:bold; color: ' + displayColor + '">' + 
-            displayAmount + 
-            '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제">&times;</button>' +
-            '<button onclick="editTransaction(\'' + tx.id + '\')" class="btn-edit" title="수정" aria-label="수정" style="background:none; border:none; cursor:pointer; color:var(--primary-gold); font-size:1rem; margin-left:5px;">✏️</button>' +
-            '</td>';
+        // 저자 한글자로 줄이기 (소리→소, 상혁→혁, 공용→공)
+        const authorShort = {'소리':'소리','상혁':'상혁','공용':'공용'}[tx.author] || (tx.author||'-');
+
+        tr.innerHTML =
+            '<td style="font-size:0.8rem; color:var(--text-muted)">' + tx.date.substring(5) + '</td>' +
+            '<td><strong style="font-size:0.88rem">' + tx.merchant + '</strong>' +
+            '<br><small style="color:var(--text-muted); font-size:0.75rem">' + typeBadge + ' · ' + catLabel + ' · ' + authorShort + '</small></td>' +
+            '<td style="font-weight:bold; color:' + displayColor + '; font-size:0.85rem; text-align:right; vertical-align:middle">' +
+            displayAmount +
+            '<br><span style="display:inline-flex; gap:2px; justify-content:flex-end">' +
+            '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제" style="font-size:0.9rem; margin:0">&times;</button>' +
+            '<button onclick="editTransaction(\'' + tx.id + '\')" class="btn-edit" title="수정" aria-label="수정" style="background:none; border:none; cursor:pointer; color:var(--primary-gold); font-size:0.85rem; padding:0">✏️</button>' +
+            '</span></td>';
         tbody.appendChild(tr);
     });
     transactionList.appendChild(tbody);
