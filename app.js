@@ -1,6 +1,9 @@
-// app.js
+/* ═══════════════════════════════════════════
+   MATRIX TODO — app.js
+════════════════════════════════════════════ */
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyDB_KH5ocr9IpUG3zo7h4UAUiePvlqXG54",
@@ -15,1210 +18,1217 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// ── CONSTANTS ──────────────────────────────
+const COLORS = ['#2D4A52','#7B6B5E','#8B5E52','#C4A882','#8B8B8B','#2C3E80','#E8305A','#4A90D9'];
+const MATRIX = {
+  do:       { label:'Do',       kr:'실행', color:'var(--do)',   cls:'do' },
+  plan:     { label:'Plan',     kr:'계획', color:'var(--plan)', cls:'plan' },
+  delegate: { label:'Delegate', kr:'위임', color:'var(--del)',  cls:'delegate' },
+  eliminate:{ label:'Eliminate',kr:'제거', color:'var(--elim)', cls:'eliminate' },
+};
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAY_KR = { Mon:'월',Tue:'화',Wed:'수',Thu:'목',Fri:'금',Sat:'토',Sun:'일' };
 
-// Schema Definition
-const assetCategories = {
-    savings: { 
-        label: "저축", 
-        items: ["청년 도약_소리", "주택 청약_소리", "신한 종신보험_소리", "토스 외화 통장_소리", "토스 자유 적금_소리", "카카오페이증권_소리", "종신 보험_상혁", "주택 청약_상혁", "청년 도약_상혁", "경조사", "운동,미용", "예비비"] 
-    },
-    investments: { 
-        label: "투자", 
-        items: ["한투 해외 주식_소리", "토스 해외 주식_소리", "코인_소리", "금_소리", "금_상혁", "신한 해외 주식_상혁"] 
-    },
-    realestate: { 
-        label: "부동산", 
-        items: ["천안아산역 월세"] 
-    },
-    pension: { 
-        label: "연금", 
-        items: ["연금저축_소리", "개인연금저축_상혁"] 
-    },
-    debt: { 
-        label: "부채", 
-        items: ["학자금 대출", "자동차", "천안아산역 오피스텔"] 
+// ── DATA LAYER ─────────────────────────────
+const DB = {
+  save(t) { setDoc(doc(db, "assets", "todo_tasks"), { items: t }); },
+  saveMemos(m) { setDoc(doc(db, "assets", "todo_memos"), { items: m }); }
+};
+
+// ── STATE ──────────────────────────────────
+let tasks = [];
+let memos = [];
+let currentTab = 'matrix';
+let dbStatusFilter = 'incomplete';
+let calDate = new Date();
+let calSelected = new Date();
+let editingId = null;
+let quickDefaultMatrix = 'do';
+let quickDefaultDate = null;
+let quickSelectedMatrix = 'do';
+let quickSelectedColor = COLORS[0];
+let fullSelectedMatrix = 'do';
+let fullSelectedColor = COLORS[0];
+let fullTaskType = 'once';
+let fullChecklist = [];
+let fullRepeatDays = [];
+let matrixStatusFilter = 'incomplete';
+
+// ── UTILS ──────────────────────────────────
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function today() { return fmtDate(new Date()); }
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dd}`;
+}
+function fmtDisplay(dateStr) {
+  if (!dateStr) return '';
+  const [y,m,d] = dateStr.split('-');
+  return `${parseInt(m)}/${parseInt(d)}`;
+}
+function fmtMonthLabel(d) {
+  return `${d.getFullYear()}년 ${d.getMonth()+1}월`;
+}
+
+// Check if a task is active on a given date
+function isTaskOnDate(task, dateStr) {
+  if (task.type === 'once') return task.date === dateStr;
+  // repeat
+  const start = task.startDate || task.date;
+  const end   = task.endDate;
+  if (dateStr < start) return false;
+  if (end && dateStr > end) return false;
+  if (!task.repeatDays || task.repeatDays.length === 0) return true;
+  const dayMap = { 0:'Sun',1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat' };
+  const d = new Date(dateStr + 'T00:00:00');
+  return task.repeatDays.includes(dayMap[d.getDay()]);
+}
+
+// Check if a repeating routine is fully completed (all dates are checked)
+function isRoutineFullyDone(task) {
+  if (task.type !== 'repeat') return task.done;
+  if (!task.endDate) return false; // Infinite routines are never fully "done"
+
+  const start = task.startDate || task.date || today();
+  const rawEnd = task.endDate;
+  const completedDates = task.completedDates || [];
+  const dayMap = {0:'Sun',1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat'};
+  
+  let cur = new Date(start+'T00:00:00');
+  const endD = new Date(rawEnd+'T00:00:00');
+  let requiredDates = 0;
+  let finishedDates = 0;
+
+  while (cur <= endD) {
+    const ds = fmtDate(cur);
+    const dow = dayMap[cur.getDay()];
+    if (!task.repeatDays || task.repeatDays.length === 0 || task.repeatDays.includes(dow)) {
+      requiredDates++;
+      if (completedDates.includes(ds)) finishedDates++;
     }
-};
+    cur.setDate(cur.getDate()+1);
+  }
 
-// ============================================================
-// 📋 모임통장 자동이체 분류 딕셔너리
-// ============================================================
+  return requiredDates > 0 && finishedDates >= requiredDates;
+}
 
-// ✅ 저축 → 자산 자동 반영 항목
-// { keywords: [SMS에 나오는 키워드들], assetId: 자산 스냅샷의 항목 ID }
-const SAVING_KEYWORD_MAP = [
-    { keywords: ['운동', '미용'],                   assetId: '운동,미용' },
-    { keywords: ['예비비'],                          assetId: '예비비' },
-    { keywords: ['경조'],                            assetId: '경조사' },
-    { keywords: ['자유 적금', '자유적금'],            assetId: '토스 자유 적금_소리' },
-    { keywords: ['일일 주식', '카카오페이증권'],       assetId: '카카오페이증권_소리' },
-    { keywords: ['청년 도약', '청년도약'],            assetId: '청년 도약_소리' },
-    { keywords: ['주택 청약', '주택청약', '청약_소리'], assetId: '주택 청약_소리' },
-    { keywords: ['종신 보험_소리', '신한 종신'],       assetId: '신한 종신보험_소리' },
-    { keywords: ['외화 통장', '외화통장'],            assetId: '토스 외화 통장_소리' },
-    { keywords: ['종신 보험_상혁', '종신보험_상혁'],  assetId: '종신 보험_상혁' },
-    { keywords: ['청약_상혁'],                       assetId: '주택 청약_상혁' },
-    { keywords: ['도약_상혁'],                       assetId: '청년 도약_상혁' },
-    { keywords: ['개인연금'],                        assetId: '개인연금저축_상혁' },
-    { keywords: ['연금저축_소리'],                   assetId: '연금저축_소리' },
-];
+// ── MINI MATRIX BUILDER ────────────────────
+function buildMiniMx(type, size = 22) {
+  const cells = ['do','plan','delegate','eliminate'];
+  const colors = { do:'#FF4B6E', plan:'#3B6FE8', delegate:'#F5A623', eliminate:'#9BA3AF' };
+  const spans = cells.map(c => {
+    const active = (type === 'all') || (type === c);
+    const color = active ? colors[c] : '#E5E7EB';
+    return `<span style="background:${color};border-radius:${size > 24 ? 3 : 2}px;display:block"></span>`;
+  }).join('');
+  return `<div style="width:${size}px;height:${size}px;display:grid;grid-template-columns:1fr 1fr;gap:${size > 24 ? 3 : 2.5}px">${spans}</div>`;
+}
 
-// ❌ 지출로만 처리 (자산 반영 X)
-const EXPENSE_KEYWORDS_LIST = [
-    '병원비', '보험료', '보험비', '상헌주식', 'KB 보험', 'KB보험',
-    '아빠', '엄마', '부모님', '경비'
-];
+function buildTaskMatrix(q, size = 20) {
+  return buildMiniMx(q, size);
+}
 
-// Default settings
-const defaultSettings = {
-    monthlyBudget: 2000000,
-    targetSaving: 1000000,
-    monthlyIncome: 5000000,
-    assets: {}
-};
+// ── NAVIGATION ─────────────────────────────
+function navigate(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById(`screen-${tab}`);
+  if (el) el.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const navEl = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+  if (navEl) navEl.classList.add('active');
+  render(tab);
+}
 
-// Initial state (Cloud live synced)
-let settings = defaultSettings;
-let transactions = [];
-let monthlyIncomes = {};
-let monthlyAssets = {};
-let monthlyBudgets = {};
-let editingTxId = null; // 수정 모드 상태 관리
-let dashboardTypeFilter = 'all'; // 대시보드 타입 필터 ('all'|'expense'|'refund'|'income'|'saving')
+function render(tab) {
+  if (tab === 'matrix')    renderMatrix();
+  if (tab === 'dashboard') renderDashboard();
+  if (tab === 'calendar')  renderCalendar();
+  if (tab === 'stats')     renderStats();
+  if (tab === 'memo')      renderMemos();
+}
 
-// Global Dashboard Date State
-let dashboardMonth = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().substring(0, 7);
-
-// DOM Elements
-const form = document.getElementById('transaction-form');
-const smsInput = document.getElementById('sms-input');
-const netWorthDisplay = document.getElementById('net-worth-display');
-const savingProgress = document.getElementById('saving-progress');
-const currentSavingDisplay = document.getElementById('current-saving-display');
-const targetSavingDisplay = document.getElementById('target-saving-display');
-const progressPercent = document.getElementById('progress-percent');
-const transactionList = document.getElementById('transaction-list');
-const budgetStatus = document.getElementById('budget-status');
-const toast = document.getElementById('toast');
-const settingForm = document.getElementById('setting-form');
-
-// Summary DOM
-const totalIncomeEl = document.getElementById('total-income');
-const totalExpenseEl = document.getElementById('total-expense');
-const totalSavingEl = document.getElementById('total-saving');
-
-// Initialize App
-function init() {
-    renderAssetUI();
-    setupEventListeners();
-    setupSPARouting();
+// ── MATRIX SCREEN ──────────────────────────
+function renderMatrix() {
+  const td = today();
+  ['do','plan','delegate','eliminate'].forEach(q => {
+    const container = document.getElementById(`q-${q}`);
+    if (!container) return;
     
-    // Start Cloud Sync
-    startDatabaseSync();
+    // Base filter by quadrant & sort by date ascending
+    let qTasks = tasks.filter(t => t.matrix === q)
+                      .sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999'));
+                      
+    // Status filter
+    if (matrixStatusFilter === 'incomplete') {
+      qTasks = qTasks.filter(t => !t.done);
+    } else if (matrixStatusFilter === 'complete') {
+      qTasks = qTasks.filter(t => t.done);
+    }
+
+    if (qTasks.length === 0) {
+      container.innerHTML = `<p class="q-empty">${matrixStatusFilter === 'complete' ? '완료된 할 일이 없어요' : '모두 완료했어요! 🎉'}</p>`;
+      return;
+    }
+    container.innerHTML = qTasks.map(t => {
+      const isDone = t.done;
+      const dateText = t.type === 'repeat' && t.endDate ? `${fmtDisplay(t.startDate||t.date)} ~ ${fmtDisplay(t.endDate)}` : fmtDisplay(t.date);
+      return `
+        <div class="q-task" data-q="${q}" data-id="${t.id}">
+          <div class="q-cb ${isDone?'checked':''}" data-check="${t.id}"></div>
+          <div class="q-task-info">
+            <div class="q-task-title ${isDone?'done':''}">
+              ${t.type==='repeat'?'<span style="font-size:9px;margin-right:2px">🔄</span>':''}
+              ${esc(t.title)}
+            </div>
+            ${dateText?`<div class="q-task-date">${dateText}</div>`:''}
+          </div>
+        </div>`;
+    }).join('');
+  });
+}
+
+// ── DASHBOARD SCREEN ───────────────────────────
+function renderDashboard() {
+  document.querySelectorAll('#status-tabs .stab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.status === dbStatusFilter);
+  });
+  const list = document.getElementById('dashboard-list');
+  if (!list) return;
+  const td = today();
+  let filtered = [...tasks].sort((a,b) => (a.date||'9999').localeCompare(b.date||'9999'));
+  if (dbStatusFilter === 'incomplete') {
+    filtered = filtered.filter(t => !t.done);
+  } else if (dbStatusFilter === 'complete') {
+    filtered = filtered.filter(t => t.done);
+  }
+  if (filtered.length === 0) {
+    const icons = {complete:'🎉',incomplete:'✅',all:'📋'};
+    const msgs  = {complete:'완료된 할 일이 없어요',incomplete:'모두 완료했어요! 🎉',all:'할 일을 추가해보세요'};
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">${icons[dbStatusFilter]}</div><p>${msgs[dbStatusFilter]}</p></div>`;
+    return;
+  }
+  list.innerHTML = filtered.map(t => {
+    const isDone = t.done;
+    const dateText = t.type === 'repeat' && t.endDate ? `${fmtDisplay(t.startDate||t.date)} ~ ${fmtDisplay(t.endDate)}` : fmtDisplay(t.date);
+    return `<div class="task-card-wrapper" data-id="${t.id}"><div class="task-card" data-q="${t.matrix}" data-id="${t.id}"><div class="tc-check ${isDone?'checked':''}" data-check="${t.id}">${isDone?'✓':''}</div><div class="tc-body"><div class="tc-title ${isDone?'done':''}">${t.type==='repeat'?'🔄 ':''}${esc(t.title)}</div><div class="tc-meta"><span class="tc-badge">${t.type==='repeat'?'반복':'한 번'}</span>${dateText?`<span class="tc-date">${dateText}</span>`:''}</div></div><div class="tc-matrix">${buildTaskMatrix(t.matrix,20)}</div></div><div class="delete-btn" data-delete-id="${t.id}"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>삭제</div></div>`;
+  }).join('');
+}
+
+
+// ── CALENDAR SCREEN ────────────────────────
+function renderCalendar() {
+  document.getElementById('cal-month-label').textContent = fmtMonthLabel(calDate);
+
+  const y = calDate.getFullYear();
+  const m = calDate.getMonth();
+  const firstDay = new Date(y, m, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const todayStr = today();
+  const selStr   = fmtDate(calSelected);
+
+  let html = '';
+  // Leading blanks
+  for (let i = 0; i < firstDay; i++) {
+    const prevDate = new Date(y, m, -firstDay + i + 1);
+    html += `<div class="cal-day other-month"><span class="cal-day-num">${prevDate.getDate()}</span></div>`;
+  }
+  // Days of month
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayTasks = tasks.filter(t => isTaskOnDate(t, dateStr));
+    const isToday   = dateStr === todayStr;
+    const isSel     = dateStr === selStr;
+    const dow       = new Date(y, m, d).getDay();
+    const isSun     = dow === 0;
+    const isSat     = dow === 6;
+    const dots = dayTasks.slice(0,4).map(t => {
+      const colors = { do:'#FF4B6E', plan:'#3B6FE8', delegate:'#F5A623', eliminate:'#9BA3AF' };
+      return `<span class="cal-dot" style="background:${colors[t.matrix]}"></span>`;
+    }).join('');
+    html += `
+      <div class="cal-day ${isToday?'today':''} ${isSel?'selected':''} ${isSun?'sunday':''} ${isSat?'saturday':''}"
+           data-date="${dateStr}">
+        <span class="cal-day-num">${d}</span>
+        <div class="cal-dots">${dots}</div>
+      </div>`;
+  }
+
+  document.getElementById('cal-grid').innerHTML = html;
+  renderCalDayTasks(selStr);
+}
+
+function renderCalDayTasks(dateStr) {
+  const [y,m,d] = dateStr.split('-');
+  document.getElementById('cal-day-label').textContent = `${parseInt(m)}월 ${parseInt(d)}일 할 일`;
+  const dayTasks = tasks.filter(t => isTaskOnDate(t, dateStr));
+  const list = document.getElementById('cal-day-list');
+  if (!list) return;
+  if (dayTasks.length === 0) {
+    list.innerHTML = `<div class="empty-state" style="padding:20px 0"><p>이 날은 할 일이 없어요</p></div>`;
+    return;
+  }
+  list.innerHTML = dayTasks.map(t => `
+    <div class="task-card" data-q="${t.matrix}" data-id="${t.id}">
+      <div class="tc-check ${t.done?'checked':''}" data-check="${t.id}">${t.done ? '✓' : ''}</div>
+      <div class="tc-body">
+        <div class="tc-title ${t.done?'done':''}">${esc(t.title)}</div>
+        <div class="tc-meta">
+          <span class="tc-badge">${t.type === 'repeat' ? '반복' : '한 번'}</span>
+          <span class="tc-date">${MATRIX[t.matrix].kr}</span>
+        </div>
+      </div>
+      <div class="tc-matrix">${buildTaskMatrix(t.matrix, 20)}</div>
+    </div>
+  `).join('');
+}
+
+// ── STATS SCREEN ───────────────────────────
+function isDoneOn(t, ds) {
+  if (t.type === 'repeat') return (t.completedDates||[]).includes(ds);
+  return t.done && (t.doneDate === ds || t.date === ds);
+}
+function renderStats() {
+  const container = document.getElementById('stats-container');
+  if (!container) return;
+  const td = today();
+  const total = tasks.length;
+  const done  = tasks.filter(t => t.type==='repeat' ? (t.completedDates||[]).includes(td) : t.done).length;
+  const pct   = total > 0 ? Math.round(done / total * 100) : 0;
+  const qkeys = ['do','plan','delegate','eliminate'];
+  const qColors = { do:'#FF4B6E', plan:'#3B6FE8', delegate:'#F5A623', eliminate:'#9BA3AF' };
+  const donutData = qkeys.map(q => ({ q, count: tasks.filter(t => t.matrix===q).length, color: qColors[q] }));
+  const qCompletion = qkeys.map(q => {
+    const qt = tasks.filter(t => t.matrix===q);
+    const qd = qt.filter(t => t.type==='repeat'?(t.completedDates||[]).includes(td):t.done).length;
+    return { q, total:qt.length, done:qd, pct: qt.length>0?Math.round(qd/qt.length*100):0 };
+  });
+  const trendDays = [];
+  for (let i=6;i>=0;i--) {
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const ds=fmtDate(d);
+    trendDays.push({ label:`${d.getMonth()+1}/${d.getDate()}`, count: tasks.filter(t=>isDoneOn(t,ds)).length });
+  }
+  container.innerHTML = `
+    <div class="stats-card">
+      <p class="stats-card-title">완료율</p>
+      <div class="completion-rate">
+        <span class="cr-pct">${pct}%</span>
+        <div class="cr-counts">
+          <div class="cr-count"><div class="val">${total}</div><div class="lbl">전체 할 일</div></div>
+          <div class="cr-count"><div class="val">${done}</div><div class="lbl">완료</div></div>
+        </div>
+      </div>
+      <div class="cr-bar-track"><div class="cr-bar" id="cr-bar" style="width:0%"></div></div>
+    </div>
+    <div class="stats-card">
+      <p class="stats-card-title">사분면별 할 일 분포</p>
+      <div class="donut-wrap">
+        <svg class="donut-svg" viewBox="0 0 140 140">${buildDonut(donutData)}</svg>
+        <div class="donut-legend">
+          ${donutData.map(d=>`<div class="legend-item"><span class="legend-dot" style="background:${d.color}"></span><span class="legend-name">${MATRIX[d.q].kr}</span><span class="legend-val">${d.count}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="stats-card">
+      <p class="stats-card-title">사분면별 완료율</p>
+      <div class="quad-bar-row">
+        ${qCompletion.map(qc=>`<div class="qb-item"><div class="qb-header"><span class="qb-label" style="color:${qColors[qc.q]}">${MATRIX[qc.q].kr}</span><span class="qb-pct" style="color:${qColors[qc.q]}">${qc.pct}%</span></div><div class="qb-track"><div class="qb-bar" data-w="${qc.pct}" style="width:0%;background:${qColors[qc.q]}"></div></div><span class="qb-sub">${qc.done}/${qc.total} 완료</span></div>`).join('')}
+      </div>
+    </div>
+    <div class="stats-card">
+      <p class="stats-card-title">최근 7일 완료 트렌드</p>
+      <div class="line-chart-wrap">${buildLineChart(trendDays)}</div>
+    </div>`;
+  requestAnimationFrame(() => {
+    const crBar = document.getElementById('cr-bar');
+    if (crBar) crBar.style.width = pct + '%';
+    document.querySelectorAll('.qb-bar').forEach(bar => { bar.style.width = bar.dataset.w + '%'; });
+  });
+}
+
+function buildDonut(data) {
+  const cx = 70, cy = 70, r = 54, stroke = 22;
+  const total = data.reduce((s, d) => s + d.count, 0);
+  if (total === 0) {
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E5E7EB" stroke-width="${stroke}"/>
+            <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700" fill="#1C1C1E">0</text>
+            <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="9" fill="#9BA3AF">할 일</text>`;
+  }
+  let paths = '';
+  let startAngle = -90;
+  const gap = total > 1 ? 3 : 0;
+  data.forEach(d => {
+    if (d.count === 0) return;
+    const angle = (d.count / total) * 360;
+    const endAngle = startAngle + angle - gap;
+    paths += `<path d="${arcPath(cx,cy,r,startAngle,endAngle)}" fill="none" stroke="${d.color}" stroke-width="${stroke}" stroke-linecap="round"/>`;
+    startAngle += angle;
+  });
+  return paths + `
+    <text x="${cx}" y="${cy-4}" text-anchor="middle" dominant-baseline="middle" font-size="20" font-weight="800" fill="#1C1C1E">${total}</text>
+    <text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="#9BA3AF">전체 할 일</text>`;
+}
+
+function arcPath(cx, cy, r, startDeg, endDeg) {
+  const s = toRad(startDeg), e = toRad(endDeg);
+  const sx = cx + r * Math.cos(s), sy = cy + r * Math.sin(s);
+  const ex = cx + r * Math.cos(e), ey = cy + r * Math.sin(e);
+  const large = (endDeg - startDeg) > 180 ? 1 : 0;
+  return `M ${sx} ${sy} A ${r} ${r} 0 ${large} 1 ${ex} ${ey}`;
+}
+function toRad(deg) { return deg * Math.PI / 180; }
+
+function buildLineChart(days) {
+  const max = Math.max(...days.map(d => d.count), 1);
+  const w = 280, h = 80, pad = 10;
+  const pts = days.map((d, i) => ({
+    x: pad + (i / (days.length - 1)) * (w - pad * 2),
+    y: h - pad - (d.count / max) * (h - pad * 2),
+    count: d.count, label: d.label,
+  }));
+  const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const fill = `${path} L ${pts[pts.length-1].x} ${h} L ${pts[0].x} ${h} Z`;
+
+  return `
+    <svg class="line-svg" viewBox="0 0 280 80">
+      <defs>
+        <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3B6FE8" stop-opacity=".3"/>
+          <stop offset="100%" stop-color="#3B6FE8" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${fill}" fill="url(#lineGrad)"/>
+      <path d="${path}" fill="none" stroke="#3B6FE8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#3B6FE8" stroke="#fff" stroke-width="1.5"/>
+        <text x="${p.x}" y="${p.y - 8}" text-anchor="middle" font-size="9" fill="#6B7280">${p.count || ''}</text>`).join('')}
+    </svg>
+    <div class="line-chart-labels">
+      ${days.map(d => `<span>${d.label}</span>`).join('')}
+    </div>`;
+}
+
+// ── QUICK ADD ──────────────────────────────
+function openQuickAdd(defaultMatrix = 'do', defaultDate = null) {
+  quickDefaultMatrix = defaultMatrix;
+  quickSelectedMatrix = defaultMatrix;
+  quickSelectedColor = COLORS[0];
+  quickDefaultDate = defaultDate;
+
+  // Set matrix selector
+  document.querySelectorAll('#quick-matrix-sel .m-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.m === defaultMatrix);
+    btn.innerHTML = `${buildMiniMx(btn.dataset.m, 28)}<span>${MATRIX[btn.dataset.m].kr}</span>`;
+  });
+
+  // Build color swatches
+  renderColorSel('quick-color-sel', COLORS[0], (c) => { quickSelectedColor = c; });
+
+  document.getElementById('quick-title').value = '';
+  document.getElementById('quick-add-sheet').classList.add('open');
+  document.getElementById('overlay').classList.add('show');
+  setTimeout(() => document.getElementById('quick-title').focus(), 350);
+}
+
+function closeQuickAdd() {
+  document.getElementById('quick-add-sheet').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function saveQuickTask() {
+  const title = document.getElementById('quick-title').value.trim();
+  if (!title) { document.getElementById('quick-title').focus(); return; }
+
+  const t = {
+    id: uid(), title, matrix: quickSelectedMatrix,
+    color: quickSelectedColor, type: 'once',
+    date: quickDefaultDate || today(), done: false, createdAt: Date.now(),
+    checklist: [], repeatDays: [],
+  };
+  tasks.unshift(t);
+  DB.save(tasks);
+  closeQuickAdd();
+  render(currentTab);
+}
+
+// ── FULL ADD ───────────────────────────────
+function openFullAdd(defaultMatrix = 'do', defaultDate = null, defaultTitle = '') {
+  editingId = null;
+  fullSelectedMatrix = defaultMatrix;
+  fullSelectedColor = COLORS[0];
+  fullTaskType = 'once';
+  fullChecklist = [];
+  fullRepeatDays = [];
+
+  const dateVal = defaultDate || today();
+  document.getElementById('full-title').value = defaultTitle;
+  document.getElementById('task-date').value = dateVal;
+  document.getElementById('modal-date-label').textContent = formatDateLabel(dateVal);
+  document.getElementById('repeat-start').value = defaultDate || today();
+  document.getElementById('repeat-end').value = '';
+  document.getElementById('notif-toggle').checked = false;
+  document.getElementById('notif-time-row').style.display = 'none';
+
+  // Matrix sel
+  document.querySelectorAll('#full-matrix-sel .m-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.m === defaultMatrix);
+    btn.innerHTML = `${buildMiniMx(btn.dataset.m, 28)}<span>${MATRIX[btn.dataset.m].kr}</span>`;
+  });
+
+  // Color sel
+  renderColorSel('full-color-sel', COLORS[0], (c) => { fullSelectedColor = c; });
+
+  // Checklist
+  renderChecklist();
+
+  // Type
+  setTaskType('once');
+
+  // Day buttons
+  document.querySelectorAll('#day-sel .day-btn').forEach(b => b.classList.remove('active'));
+
+  document.getElementById('full-add-modal').classList.add('open');
+  setTimeout(() => document.getElementById('full-title').focus(), 350);
+}
+
+function openEditTask(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  editingId = id;
+
+  fullSelectedMatrix = t.matrix;
+  fullSelectedColor  = t.color || COLORS[0];
+  fullTaskType       = t.type || 'once';
+  fullChecklist      = (t.checklist || []).map(c => ({...c}));
+  fullRepeatDays     = [...(t.repeatDays || [])];
+
+  document.getElementById('full-title').value = t.title;
+  const dateVal = t.date || today();
+  document.getElementById('task-date').value = dateVal;
+  document.getElementById('modal-date-label').textContent = formatDateLabel(dateVal);
+  document.getElementById('repeat-start').value = t.startDate || today();
+  document.getElementById('repeat-end').value   = t.endDate   || '';
+  
+  document.getElementById('notif-toggle').checked = !!t.notificationTime;
+  document.getElementById('notif-time-row').style.display = t.notificationTime ? '' : 'none';
+  document.getElementById('notif-time').value = t.notificationTime || '';
+
+  document.querySelectorAll('#full-matrix-sel .m-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.m === t.matrix);
+    btn.innerHTML = `${buildMiniMx(btn.dataset.m, 28)}<span>${MATRIX[btn.dataset.m].kr}</span>`;
+  });
+
+  renderColorSel('full-color-sel', fullSelectedColor, (c) => { fullSelectedColor = c; });
+  renderChecklist();
+  setTaskType(fullTaskType);
+
+  document.querySelectorAll('#day-sel .day-btn').forEach(b => {
+    b.classList.toggle('active', fullRepeatDays.includes(b.dataset.day));
+  });
+
+  document.getElementById('full-add-modal').classList.add('open');
+}
+
+function closeFullAdd() {
+  document.getElementById('full-add-modal').classList.remove('open');
+}
+
+function saveFullTask() {
+  const title = document.getElementById('full-title').value.trim();
+  if (!title) { document.getElementById('full-title').focus(); return; }
+
+  const dateVal   = document.getElementById('task-date').value || today();
+  const startDate = document.getElementById('repeat-start').value || today();
+  const endDate   = document.getElementById('repeat-end').value || '';
+  const notifOn   = document.getElementById('notif-toggle').checked;
+  const notifTime = notifOn ? document.getElementById('notif-time').value : null;
+
+  const data = {
+    title, matrix: fullSelectedMatrix, color: fullSelectedColor,
+    type: fullTaskType, checklist: fullChecklist, repeatDays: fullRepeatDays,
+    date: fullTaskType === 'once' ? dateVal : startDate,
+    startDate, endDate, notificationTime: notifTime,
+  };
+
+  if (editingId) {
+    const idx = tasks.findIndex(t => t.id === editingId);
+    if (idx >= 0) tasks[idx] = { ...tasks[idx], ...data };
+  } else {
+    tasks.unshift({ id: uid(), done: false, createdAt: Date.now(), doneDate: null, ...data });
+  }
+
+  DB.save(tasks);
+  closeFullAdd();
+  render(currentTab);
+}
+
+function formatDateLabel(dateStr) {
+  if (!dateStr) return '날짜 선택';
+  const [y,m,d] = dateStr.split('-');
+  return `${y}년 ${parseInt(m)}월 ${parseInt(d)}일`;
+}
+
+// ── HELPERS ────────────────────────────────
+function renderColorSel(containerId, selected, onChange) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = COLORS.map(c => `
+    <div class="color-swatch ${c === selected ? 'selected':''}" data-color="${c}"
+         style="background:${c}" role="button" tabindex="0" aria-label="색상 ${c}"></div>
+  `).join('');
+  container.querySelectorAll('.color-swatch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      container.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+      onChange(sw.dataset.color);
+    });
+  });
+}
+
+function renderChecklist() {
+  const el = document.getElementById('checklist-items');
+  if (!el) return;
+  el.innerHTML = fullChecklist.map((item, i) => `
+    <div class="checklist-item" data-ci="${i}">
+      <div class="cl-cb ${item.done?'checked':''}" data-ci="${i}">${item.done?'✓':''}</div>
+      <span class="cl-text ${item.done?'checked':''}">${esc(item.text)}</span>
+      <button class="cl-del" data-del="${i}" aria-label="삭제">×</button>
+    </div>
+  `).join('');
+}
+
+function setTaskType(type) {
+  fullTaskType = type;
+  document.querySelectorAll('#full-add-modal .type-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.type === type);
+  });
+  document.getElementById('once-settings').style.display   = type === 'once'   ? '' : 'none';
+  document.getElementById('repeat-settings').style.display = type === 'repeat' ? '' : 'none';
+}
+
+function toggleDone(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  
+  t.done = !t.done;
+  t.doneDate = t.done ? today() : null;
+  DB.save(tasks);
+  render(currentTab);
+}
+
+// ── ROUTINE DETAIL ─────────────────────────
+function openRoutineDetail(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  document.getElementById('routine-title-lbl').textContent = t.title;
+  document.getElementById('routine-body').innerHTML = buildRoutineContent(t);
+  document.getElementById('routine-edit-btn').dataset.id = id;
+  document.getElementById('routine-modal').classList.add('open');
+}
+function closeRoutineDetail() {
+  document.getElementById('routine-modal').classList.remove('open');
+  render(currentTab);
+}
+function toggleRoutineDate(taskId, dateStr) {
+  const t = tasks.find(x => x.id === taskId);
+  if (!t) return;
+  t.completedDates = t.completedDates || [];
+  if (t.completedDates.includes(dateStr)) {
+    t.completedDates = t.completedDates.filter(d => d !== dateStr);
+  } else {
+    t.completedDates.push(dateStr);
+  }
+  t.done = isRoutineFullyDone(t);
+  DB.save(tasks);
+  document.getElementById('routine-body').innerHTML = buildRoutineContent(t);
+}
+function buildRoutineContent(task) {
+  const start = task.startDate || task.date || today();
+  const rawEnd = task.endDate || today();
+  const limitDate = rawEnd;
+  const completedDates = task.completedDates || [];
+  const dayMap = {0:'Sun',1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat'};
+  const allDates = [];
+  let cur = new Date(start+'T00:00:00');
+  const endD = new Date(limitDate+'T00:00:00');
+  while (cur <= endD) {
+    const ds = fmtDate(cur);
+    const dow = dayMap[cur.getDay()];
+    if (!task.repeatDays||task.repeatDays.length===0||task.repeatDays.includes(dow)) allDates.push(ds);
+    cur.setDate(cur.getDate()+1);
+  }
+  const total = allDates.length;
+  const completed = allDates.filter(d=>completedDates.includes(d)).length;
+  const incomplete = total - completed;
+  const pct = total>0?Math.round(completed/total*100):0;
+  const r=46,cx=60,cy=60,circum=2*Math.PI*r;
+  const dash=(pct/100)*circum;
+  const repeatInfo=task.repeatDays&&task.repeatDays.length>0?task.repeatDays.map(d=>DAY_KR[d]).join(', '):'매일';
+
+  // Group by month
+  const months = {};
+  allDates.forEach(d => {
+    const [,m] = d.split('-');
+    const mLabel = `${parseInt(m)}월`;
+    if (!months[mLabel]) months[mLabel] = [];
+    months[mLabel].push(d);
+  });
+
+  const curMonthLabel = `${new Date().getMonth()+1}월`;
+  const grid = Object.keys(months).map(mLabel => {
+    const cells = months[mLabel].map(d => {
+      const done=completedDates.includes(d);
+      const [,m,day]=d.split('-');
+      return `<div class="habit-cell" data-routine-date="${d}" data-task-id="${task.id}">
+        <div class="habit-circ ${done?'done':''}">${done?'<svg viewBox="0 0 20 20"><polyline points="16 5 8 14 4 10" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>':''}</div>
+        <span class="habit-date-lbl">${parseInt(m)}.${parseInt(day)}</span>
+      </div>`;
+    }).join('');
+    const isOpen = (mLabel === curMonthLabel) ? 'open' : '';
+    return `<details class="month-group" ${isOpen}>
+      <summary class="month-group-label">${mLabel}</summary>
+      <div class="habit-grid">${cells}</div>
+    </details>`;
+  }).join('');
+  return `
+    <div class="routine-meta">
+      <span>📅 ${fmtDisplay(start)} ~ ${fmtDisplay(rawEnd)}</span>
+      <span>🔄 ${repeatInfo}</span>
+    </div>
+    <div class="routine-progress-row">
+      <div class="progress-ring-wrap">
+        <svg viewBox="0 0 120 120" class="progress-ring-svg">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#F0F0F0" stroke-width="14"/>
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#3B6FE8" stroke-width="14"
+            stroke-dasharray="${dash.toFixed(1)} ${circum.toFixed(1)}"
+            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+        </svg>
+        <div class="progress-center">
+          <span class="progress-pct-label">${pct}%</span>
+          <span class="progress-sub-label">달성률</span>
+        </div>
+      </div>
+      <div class="routine-stat-col">
+        <div class="rs-item"><span class="rs-k">전체</span><span class="rs-v">${total}일</span></div>
+        <div class="rs-item"><span class="rs-k">완료</span><span class="rs-v" style="color:var(--plan)">${completed}일</span></div>
+        <div class="rs-item"><span class="rs-k">미완료</span><span class="rs-v" style="color:var(--text3);font-weight:500">${incomplete}일</span></div>
+      </div>
+    </div>
+    <div class="routine-grid-section">
+      <div class="rg-header"><span>완료 기록</span><span>${total}일간</span></div>
+      <div class="routine-months">${total>0?grid:'<p style="color:#9BA3AF;font-size:13px;padding:12px 0">아직 기록이 없어요</p>'}</div>
+    </div>`;
+}
+
+// ── FILTER ───────────────────────────────────
+function setMatrixFilter(val) {
+  matrixStatusFilter = val;
+  document.querySelectorAll('.sort-opt').forEach(btn => btn.classList.toggle('active', btn.dataset.filter===val));
+  renderMatrix();
+  const menu = document.getElementById('sort-menu');
+  if (menu) menu.classList.remove('open');
+}
+
+// ── NOTIFICATIONS ──────────────────────────
+function requestNotifPermission() {
+  if ('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+}
+
+let lastNotifTime = {};
+function showLocalNotification(title) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  // Prevent duplicate notifications in same minute
+  if (lastNotifTime[title] && (Date.now() - lastNotifTime[title] < 60000)) return;
+  lastNotifTime[title] = Date.now();
+
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification('Matrix TODO', {
+        body: title,
+        vibrate: [200, 100, 200]
+      });
+    });
+  } else {
+    new Notification('Matrix TODO', { body: title });
+  }
+}
+
+function checkNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const now = new Date();
+  const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  const dStr = fmtDate(now);
+  
+  tasks.forEach(t => {
+    if (!t.done && t.notificationTime === timeStr) {
+      if (t.type === 'once' && t.date === dStr) {
+        showLocalNotification(t.title);
+      } else if (t.type === 'repeat' && isTaskOnDate(t, dStr)) {
+        if (!(t.completedDates||[]).includes(dStr)) {
+          showLocalNotification(t.title);
+        }
+      }
+    }
+  });
+}
+
+function deleteTask(id) {
+  if (!confirm('이 할 일을 삭제할까요?')) return;
+  tasks = tasks.filter(t => t.id !== id);
+  DB.save(tasks);
+  render(currentTab);
+}
+
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── EVENT BINDING ──────────────────────────
+function bindEvents() {
+
+  // NAV
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => navigate(btn.dataset.tab));
+  });
+
+  // OPEN QUICK ADD (all + buttons)
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.open-quick-add');
+    if (btn) {
+      const date = currentTab === 'calendar' ? fmtDate(calSelected) : null;
+      openQuickAdd(btn.dataset.defaultMatrix || 'do', date);
+    }
+  });
+
+  // QUICK SAVE / CLOSE
+  document.getElementById('quick-save').addEventListener('click', saveQuickTask);
+  document.getElementById('quick-close').addEventListener('click', closeQuickAdd);
+  document.getElementById('quick-title').addEventListener('keydown', e => { if (e.key === 'Enter') saveQuickTask(); });
+
+  // QUICK MATRIX SEL
+  document.querySelectorAll('#quick-matrix-sel .m-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      quickSelectedMatrix = btn.dataset.m;
+      document.querySelectorAll('#quick-matrix-sel .m-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // OPEN FULL ADD from quick sheet
+  document.getElementById('open-full-add').addEventListener('click', () => {
+    const date = quickDefaultDate;
+    const title = document.getElementById('quick-title').value;
+    closeQuickAdd();
+    setTimeout(() => openFullAdd(quickSelectedMatrix, date, title), 200);
+  });
+
+  // FULL ADD SAVE/CLOSE
+  document.getElementById('full-save').addEventListener('click', saveFullTask);
+  document.getElementById('full-close').addEventListener('click', closeFullAdd);
+
+  // FULL MATRIX SEL
+  document.querySelectorAll('#full-matrix-sel .m-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      fullSelectedMatrix = btn.dataset.m;
+      document.querySelectorAll('#full-matrix-sel .m-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      btn.innerHTML = `${buildMiniMx(btn.dataset.m, 28)}<span>${MATRIX[btn.dataset.m].kr}</span>`;
+    });
+  });
+
+  // TASK TYPE
+  document.getElementById('type-once').addEventListener('click', () => setTaskType('once'));
+  document.getElementById('type-repeat').addEventListener('click', () => setTaskType('repeat'));
+
+  // CHECKLIST ADD
+  document.getElementById('checklist-add').addEventListener('click', addChecklistItem);
+  document.getElementById('checklist-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addChecklistItem();
+  });
+
+  // CHECKLIST ITEMS (delegated)
+  document.getElementById('checklist-items').addEventListener('click', e => {
+    const cb  = e.target.closest('[data-ci]');
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      fullChecklist.splice(parseInt(del.dataset.del), 1);
+      renderChecklist();
+    } else if (cb) {
+      const i = parseInt(cb.dataset.ci);
+      if (fullChecklist[i]) { fullChecklist[i].done = !fullChecklist[i].done; renderChecklist(); }
+    }
+  });
+
+  // DAY SEL
+  document.getElementById('day-sel').addEventListener('click', e => {
+    const btn = e.target.closest('.day-btn');
+    if (!btn) return;
+    btn.classList.toggle('active');
+    const day = btn.dataset.day;
+    if (btn.classList.contains('active')) { if (!fullRepeatDays.includes(day)) fullRepeatDays.push(day); }
+    else { fullRepeatDays = fullRepeatDays.filter(d => d !== day); }
+  });
+
+  // NOTIFICATION TOGGLE
+  document.getElementById('notif-toggle').addEventListener('change', e => {
+    document.getElementById('notif-time-row').style.display = e.target.checked ? '' : 'none';
+    if (e.target.checked) requestNotifPermission();
+  });
+
+  // DATE LABEL CLICK → open date picker
+  document.getElementById('modal-date-label').addEventListener('click', () => {
+    document.getElementById('task-date').showPicker?.();
+    document.getElementById('task-date').click();
+  });
+  document.getElementById('task-date').addEventListener('change', e => {
+    document.getElementById('modal-date-label').textContent = formatDateLabel(e.target.value);
+  });
+
+  // OVERLAY CLICK → close sheets
+  document.getElementById('overlay').addEventListener('click', () => {
+    closeQuickAdd();
+  });
+
+  // STATUS FILTER TABS (dashboard)
+  document.getElementById('status-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.stab');
+    if (!btn) return;
+    dbStatusFilter = btn.dataset.status;
+    document.querySelectorAll('#status-tabs .stab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderDashboard();
+  });
+
+  // SWIPE TO DELETE LOGIC
+  let swipeStartX = 0;
+  let swipeStartY = 0;
+  let swipeTarget = null;
+  let isDown = false;
+
+  function onSwipeStart(e) {
+    const wrapper = e.target.closest('.task-card-wrapper');
+    if (!wrapper && !e.target.closest('.delete-btn')) {
+      document.querySelectorAll('.task-card-wrapper.swiped').forEach(w => w.classList.remove('swiped'));
+    }
+    if (wrapper) {
+      swipeTarget = wrapper;
+      isDown = true;
+      swipeStartX = e.touches ? e.touches[0].clientX : e.clientX;
+      swipeStartY = e.touches ? e.touches[0].clientY : e.clientY;
+    }
+  }
+
+  function onSwipeEnd(e) {
+    if (!isDown || !swipeTarget) return;
+    const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+    const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+    const deltaX = endX - swipeStartX;
+    const deltaY = endY - swipeStartY;
+    
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 30) {
+      if (deltaX < 0) { // Swipe left
+        document.querySelectorAll('.task-card-wrapper.swiped').forEach(w => w.classList.remove('swiped'));
+        swipeTarget.classList.add('swiped');
+      } else { // Swipe right
+        swipeTarget.classList.remove('swiped');
+      }
+    }
+    isDown = false;
+    swipeTarget = null;
+  }
+
+  document.addEventListener('touchstart', onSwipeStart, {passive: true});
+  document.addEventListener('touchend', onSwipeEnd);
+  document.addEventListener('mousedown', onSwipeStart);
+  document.addEventListener('mouseup', onSwipeEnd);
+
+  // TASK CARD CLICK
+  document.addEventListener('click', e => {
+    const delBtn = e.target.closest('.delete-btn[data-delete-id]');
+    if (delBtn) { e.stopPropagation(); deleteTask(delBtn.dataset.deleteId); return; }
+    
+    const delMemoBtn = e.target.closest('.delete-btn[data-delete-memo-id]');
+    if (delMemoBtn) { e.stopPropagation(); deleteMemo(delMemoBtn.dataset.deleteMemoId); return; }
+    
+    // Auto-close swipe state if clicking somewhere else
+    const swiped = document.querySelector('.task-card-wrapper.swiped');
+    if (swiped && !e.target.closest('.task-card-wrapper.swiped')) { swiped.classList.remove('swiped'); }
+
+    const chk = e.target.closest('[data-check]');
+    if (chk) { e.stopPropagation(); toggleDone(chk.dataset.check); return; }
+    const habitCell = e.target.closest('[data-routine-date]');
+    if (habitCell) { toggleRoutineDate(habitCell.dataset.taskId, habitCell.dataset.routineDate); return; }
+    const card = e.target.closest('.task-card, .q-task');
+    if (card && card.dataset.id) {
+      const t = tasks.find(x => x.id === card.dataset.id);
+      if (t && t.type==='repeat') openRoutineDetail(card.dataset.id);
+      else openEditTask(card.dataset.id);
+    }
+  });
+
+  // MATRIX QUADRANT TASKS — checkbox & open edit
+  document.getElementById('matrix-grid').addEventListener('click', e => {
+    const chk = e.target.closest('.q-cb[data-check]');
+    if (chk) { e.stopPropagation(); toggleDone(chk.dataset.check); return; }
+    const task = e.target.closest('.q-task[data-id]');
+    if (task) openEditTask(task.dataset.id);
+  });
+
+  // CALENDAR nav
+  document.getElementById('cal-prev').addEventListener('click', () => {
+    calDate = new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1);
+    renderCalendar();
+  });
+  document.getElementById('cal-next').addEventListener('click', () => {
+    calDate = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1);
+    renderCalendar();
+  });
+
+  // CALENDAR day click
+  document.getElementById('cal-grid').addEventListener('click', e => {
+    const day = e.target.closest('.cal-day[data-date]');
+    if (!day) return;
+    const dateStr = day.dataset.date;
+    calSelected = new Date(dateStr + 'T00:00:00');
+    document.querySelectorAll('.cal-day').forEach(d => d.classList.remove('selected'));
+    day.classList.add('selected');
+    renderCalDayTasks(dateStr);
+  });
+
+  // DETAIL MODAL save/close
+  document.getElementById('detail-close').addEventListener('click', () => {
+    document.getElementById('task-detail-modal').classList.remove('open');
+  });
+  document.getElementById('detail-save').addEventListener('click', saveFullTask);
+
+  // SORT MENU TOGGLE
+  document.getElementById('matrix-filter-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    const menu = document.getElementById('sort-menu');
+    if (menu) menu.classList.toggle('open');
+  });
+  document.getElementById('sort-menu').addEventListener('click', e => {
+    const btn = e.target.closest('.sort-opt');
+    if (btn) setMatrixFilter(btn.dataset.filter);
+  });
+  document.addEventListener('click', e => {
+    const menu = document.getElementById('sort-menu');
+    if (menu && !e.target.closest('#sort-menu') && !e.target.closest('#matrix-filter-btn')) menu.classList.remove('open');
+  }, true);
+  // ROUTINE MODAL CLOSE/EDIT
+  document.getElementById('routine-close').addEventListener('click', e => {
+    e.stopPropagation(); e.preventDefault();
+    closeRoutineDetail();
+  });
+  document.getElementById('routine-edit-btn').addEventListener('click', e => {
+    const id = e.currentTarget.dataset.id;
+    e.stopPropagation(); e.preventDefault();
+    closeRoutineDetail();
+    setTimeout(() => openEditTask(id), 300);
+  });
+  // SETTINGS BTN
+  document.getElementById('settings-btn').addEventListener('click', () => {
+    requestNotifPermission();
+    alert('알림 권한이 허용되었어요!');
+  });
+
+  // KEYBOARD: Escape closes modals
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeQuickAdd();
+      closeFullAdd();
+    }
+  });
+}
+
+function addChecklistItem() {
+  const input = document.getElementById('checklist-input');
+  const text = input.value.trim();
+  if (!text) return;
+  fullChecklist.push({ id: uid(), text, done: false });
+  renderChecklist();
+  input.value = '';
+  input.focus();
+}
+
+// ── INIT ───────────────────────────────────
+function init() {
+  // Build initial mini-mx in tabs
+  document.querySelectorAll('#matrix-tabs .tab-btn').forEach(btn => {
+    btn.innerHTML = buildMiniMx(btn.dataset.filter, 22);
+  });
+
+  // Build mini-mx in quick add matrix buttons
+  document.querySelectorAll('#quick-matrix-sel .m-btn').forEach(btn => {
+    btn.innerHTML = `${buildMiniMx(btn.dataset.m, 28)}<span>${MATRIX[btn.dataset.m].kr}</span>`;
+  });
+
+  // Build mini-mx in full add matrix buttons
+  document.querySelectorAll('#full-matrix-sel .m-btn').forEach(btn => {
+    btn.innerHTML = `${buildMiniMx(btn.dataset.m, 28)}<span>${MATRIX[btn.dataset.m].kr}</span>`;
+  });
+
+  bindEvents();
+  render('matrix');
+
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+  
+  // Notification Loop
+  setInterval(checkNotifications, 60000);
+  setTimeout(checkNotifications, 2000);
+
+  startDatabaseSync();
 }
 
 function startDatabaseSync() {
-    // 1. Transactions Syncer
-    const q = query(collection(db, "transactions"), orderBy("timestamp", "desc"));
-    onSnapshot(q, (snapshot) => {
-        transactions = [];
-        snapshot.forEach((d) => {
-            transactions.push({ id: d.id, ...d.data() });
-        });
-        renderAll();
-    });
-
-    // 2. Incomes Syncer
-    onSnapshot(collection(db, "incomes"), (snapshot) => {
-        monthlyIncomes = {};
-        snapshot.forEach((d) => {
-            monthlyIncomes[d.id] = d.data();
-        });
-        renderAll();
-    });
-
-    // 3. Assets Syncer
-    onSnapshot(collection(db, "assets"), (snapshot) => {
-        monthlyAssets = {};
-        snapshot.forEach((d) => {
-            monthlyAssets[d.id] = d.data();
-        });
-        renderAll();
-    });
-
-    // 4. Budgets Syncer
-    onSnapshot(collection(db, "budgets"), (snapshot) => {
-        monthlyBudgets = {};
-        snapshot.forEach((d) => {
-            monthlyBudgets[d.id] = d.data();
-        });
-        renderAll();
-    });
-}
-
-function renderAssetUI() {
-    const container = document.getElementById('dynamic-assets-container');
-    if(!container) return;
-    container.innerHTML = '';
-    
-    for (const [key, category] of Object.entries(assetCategories)) {
-        const fieldset = document.createElement('fieldset');
-        fieldset.className = 'setting-group';
-        fieldset.innerHTML = '<legend>' + category.label + '</legend>';
-        
-        category.items.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'form-group';
-            div.innerHTML = 
-                '<label>' + item + '</label>' +
-                '<input type="text" inputmode="numeric" data-asset-id="' + item + '" placeholder="0">';
-            fieldset.appendChild(div);
-        });
-        container.appendChild(fieldset);
-    }
-}
-
-// SPA Routing (Bulletproof Fix)
-function setupSPARouting() {
-    const navLinks = document.querySelectorAll('.nav-links a[data-target]');
-    
-    // 1. Click Listener
-    navLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const targetId = link.getAttribute('data-target');
-            switchToSection(targetId);
-        });
-    });
-
-    // 2. Hash Change Fallback
-    window.addEventListener('hashchange', () => {
-        const hash = window.location.hash.substring(1); // remove '#'
-        if (hash) {
-            switchToSection(hash);
-        }
-    });
-
-    // Handle initial state cleanly
-    document.querySelectorAll('.page-section').forEach(sec => {
-        if (!sec.classList.contains('active-page')) {
-            sec.style.display = 'none';
-        } else {
-            sec.style.display = 'block';
-        }
-    });
-}
-
-function switchToSection(targetId) {
-    const targetEl = document.getElementById(targetId);
-    if (!targetEl) return;
-
-    // Update active class on Navigation
-    document.querySelectorAll('.nav-links a').forEach(l => l.classList.remove('active'));
-    const activeLink = document.querySelector('.nav-links a[data-target="' + targetId + '"]');
-    if (activeLink) activeLink.classList.add('active');
-
-    // Force Hide all sections via pure JS + CSS classes
-    document.querySelectorAll('.page-section').forEach(sec => {
-        sec.classList.remove('active-page');
-        sec.style.display = 'none';
-    });
-
-    // Force Show target section
-    targetEl.classList.add('active-page');
-    targetEl.style.display = 'block';
-    
-    // Update URL Hash for back-button support without jump
-    history.replaceState(null, null, '#' + targetId);
-}
-
-function setupEventListeners() {
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        saveTransaction();
-    });
-
-    // Real-time Parsing
-    smsInput.addEventListener('input', parseSMS);
-
-    // Default Date to today (Local Timezone Safe)
-    const today = new Date();
-    const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    
-    // Setting Form Logic (Monthly Budgets)
-    const settingForm = document.getElementById('setting-form');
-    const budgetMonthInput = document.getElementById('budget-month-input');
-    
-    if (settingForm) {
-        settingForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveSettings();
-        });
-
-        const localMonth = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().substring(0, 7);
-        if (budgetMonthInput) budgetMonthInput.value = localMonth;
-        loadBudgetForm(localMonth);
-
-        if (budgetMonthInput) {
-            budgetMonthInput.addEventListener('change', (e) => {
-                loadBudgetForm(e.target.value);
-            });
-        }
-    }
-    
-    // Dashboard Month Filter Logic
-    const dashMonthFilter = document.getElementById('dashboard-month-filter');
-    if (dashMonthFilter) {
-        dashMonthFilter.value = dashboardMonth;
-        dashMonthFilter.addEventListener('change', (e) => {
-            dashboardMonth = e.target.value;
-            renderAll();
-        });
-    }
-
-    // Income Form Logic
-    const incomeForm = document.getElementById('income-form');
-    const incomeMonthInput = document.getElementById('income-month-input');
-    
-    if (incomeForm) {
-        incomeForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveIncome();
-        });
-
-        // Set default income month to current YYYY-MM
-        const localMonth = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().substring(0, 7);
-        incomeMonthInput.value = localMonth;
-        loadIncomeForm(localMonth);
-
-        incomeMonthInput.addEventListener('change', (e) => {
-            loadIncomeForm(e.target.value);
-        });
-    }
-
-    // Asset Form Logic
-    const assetForm = document.getElementById('asset-form');
-    const assetMonthInput = document.getElementById('asset-month-input');
-    
-    if (assetForm) {
-        assetForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveAssets();
-        });
-
-        // Use the same localMonth
-        const localMonth = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().substring(0, 7);
-        assetMonthInput.value = localMonth;
-        loadAssetForm(localMonth);
-
-        assetMonthInput.addEventListener('change', (e) => {
-            loadAssetForm(e.target.value);
-        });
-    }
-
-    // Comma formatter logic for Asset Container
-    const dynamicAssetsContainer = document.getElementById('dynamic-assets-container');
-    if (dynamicAssetsContainer) {
-        dynamicAssetsContainer.addEventListener('input', function(e) {
-            if(e.target.tagName === 'INPUT') {
-                let val = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
-                e.target.value = val ? Number(val).toLocaleString() : '';
-            }
-        });
-    }
-
-    // Comma formatter logic for Incomes & Budgets
-    const numberFormatInputs = document.querySelectorAll('#inc-sori-salary, #inc-sang-salary, #inc-sori-extra, #inc-sang-extra, #monthly-budget-input, #target-saving-input, #amount-input');
-    numberFormatInputs.forEach(input => {
-        input.type = 'text';
-        input.setAttribute('inputmode', 'numeric');
-        input.addEventListener('input', function(e) {
-            let val = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
-            e.target.value = val ? Number(val).toLocaleString() : '';
-        });
-    });
-
-    // 저축 대상 드롭다운 토글 → 기록유형(tx_type) 변경 시
-    const savingTargetGroup = document.getElementById('saving-target-group');
-    document.querySelectorAll('input[name="tx_type"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            if (savingTargetGroup) savingTargetGroup.style.display = this.value === 'saving' ? 'block' : 'none';
-        });
-    });
-
-    // 대시보드 타입 필터 버튼
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            dashboardTypeFilter = this.getAttribute('data-filter');
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            renderAll();
-        });
-    });
-}
-
-function loadIncomeForm(month) {
-    const data = monthlyIncomes[month] || { soriSal: 0, sangSal: 0, soriEx: 0, sangEx: 0 };
-    document.getElementById('inc-sori-salary').value = data.soriSal ? data.soriSal.toLocaleString() : '';
-    document.getElementById('inc-sang-salary').value = data.sangSal ? data.sangSal.toLocaleString() : '';
-    document.getElementById('inc-sori-extra').value = data.soriEx ? data.soriEx.toLocaleString() : '';
-    document.getElementById('inc-sang-extra').value = data.sangEx ? data.sangEx.toLocaleString() : '';
-}
-
-async function saveIncome() {
-    const month = document.getElementById('income-month-input').value;
-    if (!month) return;
-
-    const data = {
-        soriSal: Number(document.getElementById('inc-sori-salary').value.replace(/,/g, '')) || 0,
-        sangSal: Number(document.getElementById('inc-sang-salary').value.replace(/,/g, '')) || 0,
-        soriEx: Number(document.getElementById('inc-sori-extra').value.replace(/,/g, '')) || 0,
-        sangEx: Number(document.getElementById('inc-sang-extra').value.replace(/,/g, '')) || 0
-    };
-    
-    await setDoc(doc(db, "incomes", month), data);
-    showToast(month + " 수입 내역이 클라우드에 저장되었습니다!");
-}
-
-// Asset Form Helpers
-function loadAssetForm(month) {
-    const data = monthlyAssets[month] || {};
-    const assetInputs = document.querySelectorAll('#dynamic-assets-container input[data-asset-id]');
-    assetInputs.forEach(input => {
-        const id = input.getAttribute('data-asset-id');
-        const val = data[id] || 0;
-        input.value = val ? val.toLocaleString() : '';
-    });
-}
-
-async function saveAssets() {
-    const month = document.getElementById('asset-month-input').value;
-    if (!month) return;
-
-    const data = {};
-    const assetInputs = document.querySelectorAll('#dynamic-assets-container input[data-asset-id]');
-    assetInputs.forEach(input => {
-        const id = input.getAttribute('data-asset-id');
-        data[id] = Number(input.value.replace(/,/g, '')) || 0;
-    });
-
-    await setDoc(doc(db, "assets", month), data);
-    showToast(month + " 자산 스냅샷이 클라우드에 든든하게 저장되었습니다!");
-}
-
-// ============================================================
-// 🃏 Smart SMS Parsing Engine v2 — 카드사별 파이프라인 파서
-// ============================================================
-function parseSMS() {
-    const raw = smsInput.value;
-    if (!raw.trim()) return;
-
-    // 줄바꿈 정규화 (Windows \r\n → \n)
-    const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-
-    let parsedAmount = null;
-    let parsedDate = null;
-    let parsedMerchant = null;
-    let parsedAuthor = null;
-    let parsedCategory = 'etc';
-    let parsedType = null; // 'expense'|'refund'|'income'|'saving' 자동 감지
-    let parsedSavingTarget = ''; // 저축 대상 자산 항목 (자동 선택)
-    let isRefund = false;
-
-    // ── 1. 금액 파싱 (잔액/누적 줄은 제외하고 첫번째 금액만 추출) ──
-    for (const line of lines) {
-        if (line.includes('잔액') || line.includes('누적')) continue;
-        const m = line.match(/([0-9,]+)원/);
-        if (m) {
-            parsedAmount = m[1].replace(/,/g, '');
-            break;
-        }
-    }
-    // fallback: 잔액/누적 줄 포함해서 첫번째 금액
-    if (!parsedAmount) {
-        const m = text.match(/([0-9,]+)원/);
-        if (m) parsedAmount = m[1].replace(/,/g, '');
-    }
-
-    // ── 2. 날짜 파싱 ──
-    const fullDateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
-    const shortDateMatch = text.match(/(\d{2})\/(\d{2})/);
-    if (fullDateMatch) {
-        parsedDate = fullDateMatch[0];
-    } else if (shortDateMatch) {
-        parsedDate = new Date().getFullYear() + '-' + shortDateMatch[1] + '-' + shortDateMatch[2];
-    }
-
-    // ── 3. 결제자 판별 ──
-    if (text.includes('강*리')) parsedAuthor = '소리';
-    if (text.includes('이*혁') || text.includes('상혁')) parsedAuthor = '상혁';
-    // 삼성카드 기본은 소리 (강*리가 없어도)
-    if (!parsedAuthor && (text.includes('삼성') && text.includes('승인'))) parsedAuthor = '소리';
-    // 공통카드 / 부부통장 / 모임통장 → 공용
-    if (text.includes('공통카드') || text.includes('부부통장') || text.includes('모임통장')) {
-        parsedAuthor = '공용';
-    }
-
-    // ── 4. 카드사별 사용처 추출 ──
-
-    // [토스뱅크] 패턴: "28,300원 결제 | 에메랄드그린(EMERALD G"
-    // → "결제 |" 뒤의 텍스트가 사용처
-    const tossMatch = text.match(/결제\s*\|\s*([^\n]+)/);
-    if (tossMatch) {
-        parsedMerchant = tossMatch[1].trim();
-    }
-
-    // [삼성카드] 패턴: 시간이 있는 줄 → "04/02 12:15 풀동네판교점"
-    if (!parsedMerchant) {
-        for (const line of lines) {
-            if (!line.match(/\d{2}:\d{2}/)) continue; // 시간 포함 줄만
-            let stripped = line
-                .replace(/\d{4}-\d{2}-\d{2}/, '')
-                .replace(/\d{2}\/\d{2}/, '')
-                .replace(/\d{2}:\d{2}/, '')
-                .trim();
-            if (stripped && stripped.match(/[가-힣a-zA-Z]/)) {
-                parsedMerchant = stripped;
-                break;
-            }
-        }
-    }
-
-    // [일반 Fallback] 줄별 스캔
-    if (!parsedMerchant) {
-        for (const line of lines) {
-            // 금액이 있는 줄 스킵 (잔액, 누적, 일시불 포함)
-            if (line.match(/[0-9,]+원/)) continue;
-            // 카드사 헤더 줄 스킵
-            if (line.match(/\[(토스뱅크|삼성|KB|신한|하나|현대|우리|카카오)/)) continue;
-            if (line.includes('카드') || line.includes('체크')) continue;
-            // 승인 메시지 줄 스킵 (이름+승인 혼합)
-            if (line.includes('승인') && (line.includes('삼성') || line.includes('카드'))) continue;
-            // 이름 줄 스킵 (홍*동, 강*리 패턴)
-            if (line.match(/[가-힣]\*[가-힣]/)) continue;
-            // 잔액/누적/날짜만 있는 줄 스킵
-            if (line.includes('잔액') || line.includes('누적')) continue;
-            if (line.match(/^\d{2}\/\d{2}$/)) continue;
-
-            if (line.match(/[가-힣a-zA-Z]/) && !line.match(/\d{6,}/) && line.length > 1) {
-                parsedMerchant = line;
-                break; // ← 첫 번째 유효한 줄에서 멈춤!
-            }
-        }
-    }
-
-    // ── 5. 사용처 클린업 (잔액/누적/일시불 꼬리 제거) ──
-    if (parsedMerchant) {
-        const stopWords = ['누적', '잔액', '일시불', '할부'];
-        for (const word of stopWords) {
-            const idx = parsedMerchant.indexOf(word);
-            if (idx !== -1) parsedMerchant = parsedMerchant.substring(0, idx).trim();
-        }
-        if (!parsedMerchant || parsedMerchant === '승인') parsedMerchant = null;
-    }
-
-    // ── 5.5. [모임통장 자동이체] 목적명 기반 자동 분류 ──
-    // "X원이 출금됐어요" 패턴이 있으면 모임통장 자동이체로 판단
-    if (parsedMerchant && (text.includes('출금됐어요') || text.includes('모임통장'))) {
-        const purposeText = parsedMerchant; // 목적명 (예비비, 운동/미용 등)
-
-        // 먼저 지출 키워드인지 체크 (병원비, 보험료 등)
-        const isKnownExpense = EXPENSE_KEYWORDS_LIST.some(kw => purposeText.includes(kw));
-
-        if (!isKnownExpense) {
-            // 저축 키워드 매핑 탐색 → type=saving으로 처리
-            for (const { keywords, assetId } of SAVING_KEYWORD_MAP) {
-                if (keywords.some(kw => purposeText.includes(kw))) {
-                    parsedType = 'saving'; // 카테고리 아닌 유형으로 저장
-                    parsedSavingTarget = assetId;
-                    break;
-                }
-            }
-        }
-        // 지출 키워드도 아니고 저축 매핑도 없으면 → 기타 지출로
-    }
-
-    // ── 6. 카테고리 자동 매핑 ──
-    const categoryMap = {
-        food: ['마트', '식당', '배달', '스타벅스', '커피', 'GS25', 'CU', '세븐일레븐', '편의점', '카페', '치킨', '피자'],
-        health: ['병원', '약국', '의원', '치과', '정형외과', '한의원'],
-        traffic: ['주유', '택시', '카카오T', '교통', 'GS칼텍스', '주차', 'BNK캐피탈', 'BNK캐피'],
-        shopping: ['톤28', '올리브영', '쇼핑', '쿠팡', '무신사', 'H&M', 'ZARA'],
-        living: ['월세', '관리비', '전기', '가스', '수도', '인터넷'],
-        insurance: ['프리드L010', '삼성화04061', '메리츠통합001', '삼성화04014', '삼성화04076', 'DB손07804', '삼생04002건', '프리드L', '삼성화0', 'DB손0', '메리츠통합']
-    };
-    const checkText = text + (parsedMerchant || '');
-    outer: for (const [cat, keywords] of Object.entries(categoryMap)) {
-        for (const kw of keywords) {
-            if (checkText.includes(kw)) { parsedCategory = cat; break outer; }
-        }
-    }
-
-    // ── 7. 간편 메모 파서 (원 없는 숫자, N빵/용돈) ──
-    if (!parsedAmount) {
-        const rawNum = text.match(/(?:^|\s)([0-9][0-9,]*)(?:\s|$)/);
-        if (rawNum) {
-            parsedAmount = rawNum[1].replace(/,/g, '');
-            if (parsedMerchant && parsedMerchant.includes(rawNum[1])) {
-                parsedMerchant = parsedMerchant.replace(rawNum[1], '').trim();
-            }
-        }
-    }
-
-    // ── 8. 유형 자동 감지 (환급 / 입금 / 저축 / 지출) ──
-    const refundKeywords = ['환급', '용돈', 'n빵', '엔빵', '지원', '받음'];
-    const incomeKeywords = ['월급', '급여', '부수입', '월급입금', '급여입금'];
-    isRefund = refundKeywords.some(kw => text.toLowerCase().includes(kw));
-    const isIncome = !isRefund && incomeKeywords.some(kw => text.includes(kw));
-
-    if (parsedType === 'saving') {
-        // 모임통장 저축 자동분류 → 저축 유형
-        // (이미 parsedType 세팅됨)
-    } else if (isRefund) {
-        parsedType = 'refund';
-        parsedCategory = 'transfer';
-        if (!parsedAuthor) parsedAuthor = '공용';
-        if (!parsedMerchant) {
-            parsedMerchant = text.replace(/[0-9,]+/g, '').trim().replace(/\s+/g, ' ');
-        }
-    } else if (isIncome) {
-        parsedType = 'income';
-        parsedCategory = 'transfer';
+  onSnapshot(doc(db, "assets", "todo_tasks"), (docSnap) => {
+    if (docSnap.exists()) {
+      tasks = docSnap.data().items || [];
+      render(currentTab);
     } else {
-        parsedType = 'expense';
+      if (tasks.length === 0) seedSampleData();
     }
-    if (!parsedAuthor) parsedAuthor = '소리';
+  });
 
-    // ── 9. 폼에 값 적용 ──
-
-    // 하이라이트: 월급/부수입 유형이면 수입 메뉴로 자동 이동
-    if (parsedType === 'income') {
-        const targetMonth = parsedDate ? parsedDate.substring(0, 7) : dashboardMonth;
-        switchToSection('income-section');
-        const incomeMonthInput = document.getElementById('income-month-input');
-        if (incomeMonthInput) {
-            incomeMonthInput.value = targetMonth;
-            loadIncomeForm(targetMonth);
-        }
-        const isExtra = text.includes('부수입') || text.includes('기타수입');
-        const fieldId = parsedAuthor === '상혁'
-            ? (isExtra ? 'inc-sang-extra' : 'inc-sang-salary')
-            : (isExtra ? 'inc-sori-extra' : 'inc-sori-salary');
-        const fieldEl = document.getElementById(fieldId);
-        if (fieldEl && parsedAmount) fieldEl.value = Number(parsedAmount).toLocaleString();
-        smsInput.value = '';
-        return; // 소비기록 폼 채우지 않음
+  onSnapshot(doc(db, "assets", "todo_memos"), (docSnap) => {
+    if (docSnap.exists()) {
+      memos = docSnap.data().items || [];
+      if (currentTab === 'memo') renderMemos();
     }
-
-    if (parsedAmount) document.getElementById('amount-input').value = Number(parsedAmount).toLocaleString();
-
-    if (parsedDate) {
-        document.getElementById('date-input').value = parsedDate;
-    } else if (!document.getElementById('date-input').value) {
-        const today = new Date();
-        document.getElementById('date-input').value =
-            new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-    }
-
-    if (parsedMerchant) document.getElementById('merchant-input').value = parsedMerchant;
-
-    // 카테고리 세팅 (saving은 이제 category에 없으므로 etc로 대체)
-    const catSelectEl = document.getElementById('category-select');
-    if (catSelectEl) catSelectEl.value = parsedCategory !== 'saving' ? parsedCategory : 'etc';
-
-    // 기록 유형 라디오 세팅 (parsedType 기반)
-    const typeRadio = document.querySelector('input[name="tx_type"][value="' + parsedType + '"]');
-    if (typeRadio) typeRadio.checked = true;
-
-    // 저축 대상 드롭다운 토글 + 자동 선택
-    const saving_group = document.getElementById('saving-target-group');
-    const saving_target_sel = document.getElementById('saving-target-select');
-    if (saving_group) saving_group.style.display = parsedType === 'saving' ? 'block' : 'none';
-    if (saving_target_sel && parsedSavingTarget) saving_target_sel.value = parsedSavingTarget;
-
-    if (parsedAuthor) {
-        const radio = document.querySelector('input[name="author"][value="' + parsedAuthor + '"]');
-        if (radio) radio.checked = true;
-    }
+  });
 }
 
-// Save Transaction
-async function saveTransaction() {
-    let type = document.querySelector('input[name="tx_type"]:checked').value;
-    const date = document.getElementById('date-input').value;
-    const merchant = document.getElementById('merchant-input').value;
-    const amount = Number(document.getElementById('amount-input').value.replace(/,/g, ''));
-    const category = document.getElementById('category-select').value;
-    const author = document.querySelector('input[name="author"]:checked').value;
-    const savingTarget = document.getElementById('saving-target-select')?.value || '';
-
-    // (구) category=saving → type 강제 변환 로직 제거됨
-    // 이제 tx_type 라디오에서 직접 선택
-
-    // 저축인데 자산 항목 선택 안 한 경우 경고
-    if (type === 'saving' && !savingTarget) {
-        alert('💰 저축 항목에 반영할 자산을 선택해주세요!');
-        return;
-    }
-
-    // Duplicate Check logic !!
-    const isDuplicate = transactions.some(tx => 
-        tx.id !== editingTxId &&
-        tx.date === date && 
-        tx.merchant === merchant && 
-        tx.amount === amount
-    );
-
-    if (isDuplicate) {
-        alert('⚠️ 이미 동일한 내역이 등록되어 있습니다! (날짜, 사용처, 금액 일치)');
-        return;
-    }
-
-    const timestamp = editingTxId ? transactions.find(t=>t.id===editingTxId).timestamp : new Date().toISOString();
-    
-    const newTxData = {
-        type, date, merchant, amount, category, author,
-        savingTarget: type === 'saving' ? savingTarget : '',
-        timestamp
-    };
-
-    if (editingTxId) {
-        await setDoc(doc(db, 'transactions', editingTxId), newTxData);
-        showToast('내역이 멋지게 수정되었습니다!');
-        window.cancelEdit();
-    } else {
-        const newTxId = Date.now().toString();
-        await setDoc(doc(db, 'transactions', newTxId), newTxData);
-
-        // ── 저축 자동 자산 반영 ──
-        if (type === 'saving' && savingTarget) {
-            const txMonth = date.substring(0, 7); // YYYY-MM
-            const currentSnap = monthlyAssets[txMonth] || {};
-            const updatedSnap = { ...currentSnap };
-            // 해당 자산 항목에 금액 누적
-            updatedSnap[savingTarget] = (Number(updatedSnap[savingTarget]) || 0) + amount;
-            await setDoc(doc(db, 'assets', txMonth), updatedSnap);
-            showToast('💰 ' + savingTarget + '에 ' + amount.toLocaleString() + '원 자동 반영 완료!');
-        } else {
-            showToast('억! 소리 나게 클라우드 저장 완료!');
-        }
-        
-        // 폼 초기화
-        smsInput.value = '';
-        document.getElementById('amount-input').value = '';
-        document.getElementById('merchant-input').value = '';
-        document.getElementById('category-select').value = 'food';
-        const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-        document.getElementById('date-input').value = localDate;
-        document.querySelector('input[name="author"][value="소리"]').checked = true;
-        document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
-        const savingGroup = document.getElementById('saving-target-group');
-        if (savingGroup) savingGroup.style.display = 'none';
-        const savingTargetSel = document.getElementById('saving-target-select');
-        if (savingTargetSel) savingTargetSel.value = '';
-    }
+function seedSampleData() {
+  const samples = [
+    { title: '프로젝트 발표 준비', matrix: 'do',       date: today(), color: COLORS[6], type: 'once' },
+    { title: '운동 계획 세우기',   matrix: 'plan',     date: today(), color: COLORS[7], type: 'once' },
+    { title: '이메일 답장',        matrix: 'delegate', date: today(), color: COLORS[0], type: 'once' },
+    { title: 'SNS 피드 확인',      matrix: 'eliminate',date: today(), color: COLORS[4], type: 'once' },
+    { title: '일일 할 일 기록',    matrix: 'do',       date: today(), color: COLORS[6], type: 'repeat',
+      repeatDays: ['Mon','Tue','Wed','Thu','Fri'], startDate: today() },
+  ];
+  samples.forEach(s => {
+    tasks.push({ id: uid(), done: false, createdAt: Date.now(), doneDate: null, checklist: [], repeatDays: [], ...s });
+  });
+  DB.save(tasks);
+  render('matrix');
 }
 
-// 수정 모드 활성화
-window.editTransaction = function(id) {
-    const tx = transactions.find(t => t.id === id);
-    if (!tx) return;
-    
-    editingTxId = id;
-    
-    // 네비게이션 시뮬레이트 (입력 탭으로 이동)
-    document.querySelector('a[data-target="input-section"]').click();
-    
-    // 정보 채우기
-    let typeRadio = document.querySelector(`input[name="tx_type"][value="${tx.type}"]`);
-    if(typeRadio) typeRadio.checked = true;
-    else document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
-    
-    document.getElementById('date-input').value = tx.date;
-    document.getElementById('merchant-input').value = tx.merchant;
-    document.getElementById('amount-input').value = Number(tx.amount).toLocaleString();
-    document.getElementById('category-select').value = tx.category;
-    if (tx.author) document.querySelector(`input[name="author"][value="${tx.author}"]`).checked = true;
-    
-    // 버튼 상태 변환
-    document.getElementById('btn-save-tx').innerText = '수정 완료';
-    const cancelBtn = document.getElementById('btn-cancel-edit');
-    if(cancelBtn) cancelBtn.style.display = 'block';
-};
+// ── MEMO SCREEN ─────────────────────────────
+let editingMemoId = null;
 
-// 수정 취소
-window.cancelEdit = function() {
-    editingTxId = null;
-    document.getElementById('btn-save-tx').innerText = '저장하기';
-    const cancelBtn = document.getElementById('btn-cancel-edit');
-    if(cancelBtn) cancelBtn.style.display = 'none';
-    
-    // 폼 초기화
-    smsInput.value = '';
-    document.getElementById('amount-input').value = '';
-    document.getElementById('merchant-input').value = '';
-    document.querySelector('input[name="tx_type"][value="expense"]').checked = true;
-    document.getElementById('category-select').value = 'food';
-    const localDate = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    document.getElementById('date-input').value = localDate;
-    document.querySelector('input[name="author"][value="소리"]').checked = true;
-};
+function renderMemos() {
+  const container = document.getElementById('memo-list-container');
+  if (!container) return;
+  memos.sort((a,b) => b.updatedAt - a.updatedAt);
+  
+  if (memos.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:40px 0"><p>작성된 메모가 없습니다</p></div>`;
+    return;
+  }
+  
+  container.innerHTML = memos.map(m => {
+    const temp = document.createElement('div');
+    temp.innerHTML = m.content;
+    const lines = temp.innerText.split('\n').map(l => l.trim()).filter(l => l);
+    const title = lines.length > 0 ? lines[0] : '새로운 메모';
+    const preview = lines.length > 1 ? lines[1] : '추가 텍스트 없음';
+    const d = new Date(m.updatedAt);
+    const dtStr = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    return `
+      <div class="task-card-wrapper" data-memo-wrapper="${m.id}">
+        <div class="memo-card" data-memo-id="${m.id}" style="width:100%;flex-shrink:0;margin-bottom:0px">
+          <div class="memo-title">${esc(title)}</div>
+          <div class="memo-preview"><span class="memo-date">${dtStr}</span> ${esc(preview)}</div>
+        </div>
+        <div class="delete-btn" data-delete-memo-id="${m.id}" style="border-radius:12px;margin-bottom:0px">
+          <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+          삭제
+        </div>
+      </div>
+    `;
+  }).join('');
+}
 
-// Delete Transaction
-window.deleteTransaction = async function(id) {
-    if (confirm("정말 이 내역을 삭제하시겠습니까?")) {
-        await deleteDoc(doc(db, "transactions", id.toString()));
-        showToast("내역이 클라우드에서 삭제되었습니다.");
+function deleteMemo(id) {
+  memos = memos.filter(m => m.id !== id);
+  DB.saveMemos(memos);
+  renderMemos();
+}
+
+function openMemoDetail(id) {
+  editingMemoId = id;
+  const area = document.getElementById('memo-content-area');
+  if (id) {
+    const m = memos.find(x => x.id === id);
+    area.innerHTML = m ? m.content : '';
+  } else {
+    area.innerHTML = '';
+  }
+  document.getElementById('screen-memo-list').style.display = 'none';
+  document.getElementById('screen-memo-detail').style.display = 'flex';
+  setTimeout(() => { area.focus(); }, 100);
+}
+
+function closeMemoDetail() {
+  saveCurrentMemo();
+  document.getElementById('screen-memo-list').style.display = 'flex';
+  document.getElementById('screen-memo-detail').style.display = 'none';
+  render('memo');
+}
+
+function saveCurrentMemo() {
+  const area = document.getElementById('memo-content-area');
+  const content = area.innerHTML.trim();
+  const temp = document.createElement('div');
+  temp.innerHTML = content;
+  const textContent = temp.innerText.trim();
+  
+  if (!textContent && !content.includes('<img')) {
+    if (editingMemoId) {
+      memos = memos.filter(m => m.id !== editingMemoId); // delete if empty
+      DB.saveMemos(memos);
     }
-};
-
-// Delete Income
-window.deleteIncome = async function(month) {
-    if (confirm(month + " 월의 수입 기록을 모두 삭제하시겠습니까?")) {
-        await deleteDoc(doc(db, "incomes", month));
-        showToast(month + " 수입이 클라우드에서 삭제되었습니다.");
+    editingMemoId = null;
+    return;
+  }
+  
+  if (editingMemoId) {
+    const m = memos.find(x => x.id === editingMemoId);
+    if (m && m.content !== content) {
+      m.content = content;
+      m.updatedAt = Date.now();
     }
-};
+  } else {
+    memos.push({ id: uid(), content, createdAt: Date.now(), updatedAt: Date.now() });
+  }
+  DB.saveMemos(memos);
+  editingMemoId = null;
+}
 
-// Delete Budget
-window.deleteBudget = async function(month) {
-    if (confirm(month + " 월의 예산 기록을 삭제하시겠습니까? (이전 달의 세팅을 따라갑니다)")) {
-        await deleteDoc(doc(db, "budgets", month));
-        showToast(month + " 예산 설정이 삭제되었습니다.");
-        
-        const currentFormMonth = document.getElementById('budget-month-input').value;
-        if (currentFormMonth === month) {
-            loadBudgetForm(month);
-        }
-    }
-};
-
-// Render Logic
-function renderAll() {
-    // Current Local YYYY-MM for Dashboard filtering (Controlled by Dashboard Filter Input)
-    const currentMonth = dashboardMonth;
-
-    // Lifetime tracking for Net Worth
-    let lifetimeSavings = 0;
-    let lifetimeDebtPayments = 0;
-    
-    // Current Month tracking for Dashboard Widgets
-    let monthSavings = 0; // 자산 스냅샷 델타(비교) 값으로 할당될 예정
-    let monthExpenses = 0;
-    let monthDebtPayments = 0; // Fix ReferenceError
-
-    const tbody = document.createDocumentFragment();
-    transactionList.innerHTML = '';
-    
-    // Filter out transactions strictly by currentMonth for Dashboard List
-    const displayTransactionsForMonth = transactions.filter(tx => tx.date.substring(0, 7) === currentMonth);
-    // 타입 필터 적용
-    const displayList = dashboardTypeFilter === 'all'
-        ? displayTransactionsForMonth
-        : displayTransactionsForMonth.filter(tx => tx.type === dashboardTypeFilter);
-
-    // [중요 로직] 클라우드 동기화 과정에서 뷰와 실제 폼 데이터가 엇갈리는 현상을 막기 위한 데이터 주입
-    const currentAssetMonth = document.getElementById('asset-month-input')?.value;
-    if (currentAssetMonth) loadAssetForm(currentAssetMonth);
-
-    const currentIncomeMonth = document.getElementById('income-month-input')?.value;
-    if (currentIncomeMonth) loadIncomeForm(currentIncomeMonth);
-
-    const currentBudgetMonth = document.getElementById('budget-month-input')?.value;
-    if (currentBudgetMonth) loadBudgetForm(currentBudgetMonth);
-
-    transactions.forEach(tx => {
-        // Lifetime Net Worth Additions
-        if (tx.type === 'saving') lifetimeSavings += tx.amount;
-        if (tx.type === 'refund') lifetimeSavings += tx.amount; // 환급도 통장 잔고 증가효과
-        
-        // Monthly Dashboard Summaries
-        const txMonth = tx.date.substring(0, 7);
-        if (txMonth === currentMonth) {
-            if (tx.type === 'expense') monthExpenses += tx.amount;
-            if (tx.type === 'refund') monthExpenses -= tx.amount; // [지출 방어 로직] 쓴 돈에서 까기
-            if (tx.type === 'debt_payment') monthDebtPayments += tx.amount;
-        }
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('memo-add-btn')?.addEventListener('click', () => openMemoDetail(null));
+  document.getElementById('memo-back-btn')?.addEventListener('click', closeMemoDetail);
+  document.getElementById('memo-save-btn')?.addEventListener('click', closeMemoDetail);
+  document.getElementById('memo-list-container')?.addEventListener('click', e => {
+    const card = e.target.closest('.memo-card');
+    if (card) openMemoDetail(card.dataset.memoId);
+  });
+  
+  document.querySelectorAll('.memo-toolbar button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const cmd = btn.dataset.cmd;
+      if (cmd) document.execCommand(cmd, false, null);
+      document.getElementById('memo-content-area').focus();
     });
+  });
+});
 
-    // --- [NEW 핵심 로직] 자산 스냅샷 기반의 '이번 달 총 저축(자산 성장)' 산출 ---
-    // 자산 그룹 중 '저축, 투자, 부동산, 연금'에 속하는 항목의 전월 대비 증가분을 '총 저축'으로 계산
-    const targetGroups = ['savings', 'investments', 'realestate', 'pension'];
-    
-    function getAssetSum(monthStr) {
-        if (!monthlyAssets[monthStr]) return 0;
-        let sum = 0;
-        targetGroups.forEach(groupKey => {
-            if (assetCategories[groupKey]) {
-                assetCategories[groupKey].items.forEach(item => {
-                    sum += (monthlyAssets[monthStr][item] || 0);
-                });
-            }
-        });
-        return sum;
-    }
+document.addEventListener('DOMContentLoaded', init);
 
-    // 전월 날짜(YYYY-MM) 안전하게 구하기
-    const [currY, currM] = currentMonth.split('-');
-    let prevM = parseInt(currM) - 1;
-    let prevY = parseInt(currY);
-    if(prevM === 0) { prevM = 12; prevY -= 1; }
-    const prevMonthStr = prevY + '-' + String(prevM).padStart(2, '0');
-
-    if (monthlyAssets[currentMonth] && monthlyAssets[prevMonthStr]) {
-        const currSum = getAssetSum(currentMonth);
-        const prevSum = getAssetSum(prevMonthStr);
-        monthSavings = currSum - prevSum;
-    } else {
-        // 비교할 전월 데이터가 없는 등 안전 장치
-        monthSavings = 0; 
-    }
-
-    // 날짜별 그룹화
-    const dateGroups = {};
-    displayList.forEach(tx => {
-        if (!dateGroups[tx.date]) dateGroups[tx.date] = [];
-        dateGroups[tx.date].push(tx);
-    });
-    const sortedDates = Object.keys(dateGroups).sort().reverse();
-
-    sortedDates.forEach(dateStr => {
-        // 날짜 헤더 행
-        const headerTr = document.createElement('tr');
-        const mm = dateStr.substring(5, 7);
-        const dd = dateStr.substring(8, 10);
-        const dayNames = ['일','월','화','수','목','금','토'];
-        const dayOfWeek = dayNames[new Date(dateStr).getDay()];
-        headerTr.innerHTML = '<td colspan="2" style="' +
-            'background:var(--bg-color); color:var(--primary-navy); font-weight:700; ' +
-            'font-size:0.78rem; padding:8px 4px 4px; border-bottom:2px solid var(--primary-gold)' +
-            '">' + mm + '월 ' + dd + '일 (' + dayOfWeek + ')</td>';
-        tbody.appendChild(headerTr);
-
-        dateGroups[dateStr].forEach(tx => {
-            const tr = document.createElement('tr');
-
-            let typeBadge = '';
-            if(tx.type==='expense') typeBadge = '📉 지출';
-            else if(tx.type==='income') typeBadge = '📈 월급/부수입';
-            else if(tx.type==='saving') typeBadge = '💰 저축';
-            else if(tx.type==='refund') typeBadge = '💵 환급';
-            else typeBadge = '기타';
-
-            const catLabels = {
-                food: '식비', living: '주거', traffic: '교통',
-                health: '의료', shopping: '쇼핑', insurance: '보험',
-                gift: '선물', transfer: '이체', etc: '기타'
-            };
-            const catLabel = catLabels[tx.category] || tx.category;
-
-            let displayAmount = tx.amount.toLocaleString() + '원';
-            let displayColor = (tx.type === 'expense' ? 'var(--danger)' : 'var(--success)');
-            if (tx.type === 'refund' || tx.type === 'saving' || tx.type === 'income') {
-                displayAmount = '+' + tx.amount.toLocaleString() + '원';
-                displayColor = 'var(--success)';
-            }
-
-            const authorShort = tx.author || '-';
-
-            tr.innerHTML =
-                '<td><strong style="font-size:0.88rem">' + tx.merchant + '</strong>' +
-                '<br><small style="color:var(--text-muted); font-size:0.75rem">' + typeBadge + ' · ' + catLabel + ' · ' + authorShort + '</small></td>' +
-                '<td style="font-weight:bold; color:' + displayColor + '; font-size:0.85rem; text-align:right; vertical-align:middle">' +
-                displayAmount +
-                '<br><span style="display:inline-flex; gap:2px; justify-content:flex-end">' +
-                '<button onclick="deleteTransaction(\'' + tx.id + '\')" class="btn-delete" title="삭제" aria-label="삭제" style="font-size:0.9rem; margin:0">&times;</button>' +
-                '<button onclick="editTransaction(\'' + tx.id + '\')" class="btn-edit" title="수정" aria-label="수정" style="background:none; border:none; cursor:pointer; color:var(--primary-gold); font-size:0.85rem; padding:0">✏️</button>' +
-                '</span></td>';
-            tbody.appendChild(tr);
-        });
-    });
-    transactionList.appendChild(tbody);
-
-    // Monthly Income retrieval
-    const monthIncomeData = monthlyIncomes[currentMonth] || { soriSal: 0, sangSal: 0, soriEx: 0, sangEx: 0 };
-    const monthTotalIncomes = monthIncomeData.soriSal + monthIncomeData.sangSal + monthIncomeData.soriEx + monthIncomeData.sangEx;
-
-    // Summary Boxes Update (Current Month Only!)
-    totalIncomeEl.textContent = monthTotalIncomes.toLocaleString() + '원';
-    totalExpenseEl.textContent = monthExpenses.toLocaleString() + '원';
-    totalSavingEl.textContent = monthSavings.toLocaleString() + '원';
-
-    // Render Income List Table
-    const incomeListEl = document.getElementById('income-list');
-    if (incomeListEl) {
-        incomeListEl.innerHTML = '';
-        const sortedMonths = Object.keys(monthlyIncomes).sort().reverse();
-        sortedMonths.forEach(m => {
-            const d = monthlyIncomes[m];
-            const soriTotal = d.soriSal + d.soriEx;
-            const sangTotal = d.sangSal + d.sangEx;
-            const total = soriTotal + sangTotal;
-            const tr = document.createElement('tr');
-            tr.innerHTML = 
-                '<td><strong>' + m + '</strong></td>' +
-                '<td>' + soriTotal.toLocaleString() + '원</td>' +
-                '<td>' + sangTotal.toLocaleString() + '원</td>' +
-                '<td style="font-weight:bold; color:var(--success)">' + total.toLocaleString() + '원</td>' +
-                '<td><button onclick="deleteIncome(\'' + m + '\')" class="btn-delete" title="삭제">&times;</button></td>';
-            incomeListEl.appendChild(tr);
-        });
-    }
-
-    // Render Budget List Table
-    const budgetListEl = document.getElementById('budget-list');
-    if (budgetListEl) {
-        budgetListEl.innerHTML = '';
-        const sortedBudgets = Object.keys(monthlyBudgets).sort().reverse();
-        sortedBudgets.forEach(m => {
-            const b = monthlyBudgets[m];
-            const tr = document.createElement('tr');
-            tr.innerHTML = 
-                '<td><strong>' + m + '</strong></td>' +
-                '<td>' + (b.budget || 0).toLocaleString() + '원</td>' +
-                '<td style="font-weight:bold; color:var(--success)">' + (b.targetSaving || 0).toLocaleString() + '원</td>' +
-                '<td><button onclick="deleteBudget(\'' + m + '\')" class="btn-delete" title="삭제">&times;</button></td>';
-            budgetListEl.appendChild(tr);
-        });
-    }
-
-    // Chart.js Rendering
-    renderChart();
-    
-    // Calculate Net Worth based on the latest snapshot + current month's savings
-    let baseAssetTotal = 0;
-    let baseDebtTotal = 0;
-
-    // Find applicable month in monthlyAssets (<= currentMonth)
-    const sortedAssetMonths = Object.keys(monthlyAssets).sort();
-    let targetAssetMonth = null;
-    for (let i = sortedAssetMonths.length - 1; i >= 0; i--) {
-        if (sortedAssetMonths[i] <= currentMonth) {
-            targetAssetMonth = sortedAssetMonths[i];
-            break;
-        }
-    }
-
-    if (targetAssetMonth) {
-        const snap = monthlyAssets[targetAssetMonth];
-        for (const [key, category] of Object.entries(assetCategories)) {
-            category.items.forEach(item => {
-                const val = Number(snap[item] || 0);
-                if (key === 'debt') {
-                    baseDebtTotal += val;
-                } else {
-                    baseAssetTotal += val;
-                }
-            });
-        }
-    }
-
-    const actualAssets = baseAssetTotal; 
-    const actualDebt = baseDebtTotal; 
-    const netWorth = actualAssets - actualDebt;
-
-    if (netWorthDisplay) netWorthDisplay.textContent = netWorth.toLocaleString() + '원';
-    
-    const totalAssetDisplay = document.getElementById('total-asset-display');
-    if (totalAssetDisplay) totalAssetDisplay.textContent = actualAssets.toLocaleString() + '원';
-    
-    const totalDebtDisplay = document.getElementById('total-debt-display');
-    if (totalDebtDisplay) totalDebtDisplay.textContent = actualDebt.toLocaleString() + '원';
-
-    // Budget & Target Retrieving (Monthly Fallback)
-    let currentBudgetData = { budget: 2000000, targetSaving: 1000000 };
-    const sortedBudgetMonths = Object.keys(monthlyBudgets).sort();
-    for (let i = sortedBudgetMonths.length - 1; i >= 0; i--) {
-        if (sortedBudgetMonths[i] <= currentMonth) {
-            currentBudgetData = monthlyBudgets[sortedBudgetMonths[i]];
-            break;
-        }
-    }
-
-    const targetSaving = Number(currentBudgetData.targetSaving || 1);
-    let ratio = (monthSavings / targetSaving) * 100;
-    if (ratio > 100) ratio = 100;
-    
-    savingProgress.style.width = ratio + '%';
-    currentSavingDisplay.textContent = '현재: ' + monthSavings.toLocaleString() + '원';
-    targetSavingDisplay.textContent = '목표: ' + targetSaving.toLocaleString() + '원';
-    progressPercent.textContent = ratio.toFixed(1) + '%';
-
-    // Calculate Budget Target Status (Monthly Focus)
-    const budget = Number(currentBudgetData.budget || 0);
-    const remainBudget = budget - monthExpenses;
-    
-    if (remainBudget < 0) {
-        budgetStatus.style.color = "var(--danger)";
-        budgetStatus.textContent = '⚠️ 예산 초과! ' + Math.abs(remainBudget).toLocaleString() + '원 적자';
-    } else {
-        budgetStatus.style.color = "var(--primary-navy)";
-        budgetStatus.textContent = '✅ 잔여 생활 예산: ' + remainBudget.toLocaleString() + '원 남음';
-    }
-
-    // The inputs for bindings are handled directly inside the budget form now!
-}
-
-function loadBudgetForm(month) {
-    let data = { budget: 2000000, targetSaving: 1000000 };
-    const sortedBudgetMonths = Object.keys(monthlyBudgets).sort();
-    for (let i = sortedBudgetMonths.length - 1; i >= 0; i--) {
-        if (sortedBudgetMonths[i] <= month) {
-            data = monthlyBudgets[sortedBudgetMonths[i]];
-            break;
-        }
-    }
-    const bInput = document.getElementById('monthly-budget-input');
-    const sInput = document.getElementById('target-saving-input');
-    if (bInput) bInput.value = data.budget ? data.budget.toLocaleString() : '';
-    if (sInput) sInput.value = data.targetSaving ? data.targetSaving.toLocaleString() : '';
-}
-
-// Settings Save (Now Monthly Budget Save)
-async function saveSettings() {
-    const month = document.getElementById('budget-month-input').value;
-    if (!month) return;
-
-    const data = {
-        budget: Number(document.getElementById('monthly-budget-input').value.replace(/,/g, '')) || 0,
-        targetSaving: Number(document.getElementById('target-saving-input').value.replace(/,/g, '')) || 0
-    };
-
-    await setDoc(doc(db, "budgets", month), data);
-    showToast(month + " 예산 설정이 클라우드에 안전하게 저장되었습니다!");
-}
-
-// Toast Function
-function showToast(msg) {
-    toast.textContent = msg;
-    toast.classList.add('show');
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 3000);
-}
-
-let assetChartInst = null;
-function renderChart() {
-    const ctx = document.getElementById('asset-chart');
-    if (!ctx) return;
-    
-    const sortedMonths = Object.keys(monthlyAssets).sort();
-    if (sortedMonths.length === 0) return;
-
-    const labels = [];
-    const netWorthData = []; // Line chart
-    const savingsData = [];
-    const investmentsData = [];
-    const realestateData = [];
-    const pensionData = [];
-
-    sortedMonths.forEach(m => {
-        const snap = monthlyAssets[m];
-        let cSavings=0, cInvest=0, cReal=0, cPension=0, cDebt=0;
-        
-        assetCategories['savings'].items.forEach(i => cSavings+=Number(snap[i]||0));
-        assetCategories['investments'].items.forEach(i => cInvest+=Number(snap[i]||0));
-        assetCategories['realestate'].items.forEach(i => cReal+=Number(snap[i]||0));
-        assetCategories['pension'].items.forEach(i => cPension+=Number(snap[i]||0));
-        assetCategories['debt'].items.forEach(i => cDebt+=Number(snap[i]||0));
-
-        labels.push(m);
-        savingsData.push(cSavings);
-        investmentsData.push(cInvest);
-        realestateData.push(cReal);
-        pensionData.push(cPension);
-        
-        const tAsset = cSavings + cInvest + cReal + cPension;
-        netWorthData.push(tAsset - cDebt);
-    });
-
-    if (assetChartInst) {
-        assetChartInst.destroy();
-    }
-
-    assetChartInst = new Chart(ctx, {
-        type: 'bar', // Base Type
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    type: 'line',
-                    label: '순자산 합계',
-                    data: netWorthData,
-                    borderColor: '#f59e0b', // Vibrant Orange
-                    backgroundColor: '#f59e0b',
-                    borderWidth: 2,
-                    tension: 0,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    z: 10 // draw above bars
-                },
-                {
-                    type: 'bar',
-                    label: '저축',
-                    data: savingsData,
-                    backgroundColor: '#1e3a8a', // Deep navy
-                    stack: 'Stack 0',
-                },
-                {
-                    type: 'bar',
-                    label: '투자',
-                    data: investmentsData,
-                    backgroundColor: '#3b82f6', // Blue
-                    stack: 'Stack 0',
-                },
-                {
-                    type: 'bar',
-                    label: '부동산',
-                    data: realestateData,
-                    backgroundColor: '#93c5fd', // Light blue
-                    stack: 'Stack 0',
-                },
-                {
-                    type: 'bar',
-                    label: '연금',
-                    data: pensionData,
-                    backgroundColor: '#dbeafe', // Very light blue
-                    stack: 'Stack 0',
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': ' + context.parsed.y.toLocaleString() + '원';
-                        }
-                    }
-                }
-            },
-            interaction: {
-                intersect: false,
-                mode: 'index',
-            },
-            scales: {
-                x: { stacked: true },
-                y: {
-                    stacked: true,
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            if (value >= 100000000) return (value / 100000000) + '억';
-                            if (value >= 10000) return (value / 10000) + '만';
-                            return value;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-// Start
-init();

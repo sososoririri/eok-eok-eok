@@ -1,335 +1,365 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- 모바일 앱처럼 보이게 하는 필수 태그 -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#1a2a3a">
-    <title>억억억</title>
-    
-    <!-- 데스크탑 브라우저 탭용 내장 마법 아이콘 -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='white'/%3E%3Ctext y='75' x='15' font-family='sans-serif' font-weight='900' font-size='72' fill='%23ffd700'%3E억%3C/text%3E%3C/svg%3E">
-    <!-- 스마트폰 배경화면용 앱 아이콘 -->
-    <link rel="apple-touch-icon" href="icon.png">
-
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Pretendard:wght@400;600;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Matrix TODO">
+  <meta name="theme-color" content="#ffffff">
+  <title>Matrix TODO - 할 일 관리</title>
+  <meta name="description" content="아이젠하워 매트릭스로 할 일의 우선순위를 쉽게 정하세요">
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="app">
-        <!-- Navigation -->
-        <nav id="navbar">
-            <div class="logo">
-                <span class="logo-text">억억억</span>
-            </div>
-            <ul class="nav-links">
-                <li><a href="#dashboard" class="active" data-target="dashboard">홈</a></li>
-                <li><a href="#input-section" data-target="input-section">소비기록</a></li>
-                <li><a href="#income-section" data-target="income-section">수입</a></li>
-                <li><a href="#asset-section" data-target="asset-section">자산</a></li>
-                <li><a href="#settings-section" data-target="settings-section">설정</a></li>
-            </ul>
-        </nav>
+<div id="app">
 
-        <main class="main-content" id="main-content">
-            <!-- Dashboard Section -->
-            <section id="dashboard" class="page-section active-page">
-                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: var(--primary-navy);">소리상혁 가게부 대시보드</h2>
-                    <input type="month" id="dashboard-month-filter" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;">
-                </div>
-                <div class="dashboard-grid">
+  <!-- ══════════════ SCREEN: MATRIX ══════════════ -->
+  <div id="screen-matrix" class="screen active">
+    <header class="screen-header">
+      <button class="icon-btn" id="settings-btn" aria-label="설정">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+      <h1 class="screen-title">Matrix</h1>
+      <div class="header-right">
+        <button class="icon-btn open-quick-add" aria-label="할 일 추가" data-default-matrix="do">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="icon-btn" id="matrix-filter-btn" aria-label="필터">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+        </button>
+      </div>
+    </header>
 
-                <div class="summary-grid">
-                    <div class="summary-box income-box">
-                        <h4>총 수입</h4>
-                        <p id="total-income">0원</p>
-                    </div>
-                    <div class="summary-box expense-box">
-                        <h4>총 지출</h4>
-                        <p id="total-expense">0원</p>
-                    </div>
-                    <div class="summary-box saving-box">
-                        <h4>총 저축</h4>
-                        <p id="total-saving">0원</p>
-                    </div>
-                </div>
-
-                <div class="widget goal-progress">
-                    <h3>이번 달 저축 목표 달성률</h3>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" id="saving-progress" style="width: 0%;"></div>
-                    </div>
-                    <div class="progress-labels">
-                        <span id="current-saving-display">현재: 0원</span>
-                        <span id="target-saving-display">목표: 0원</span>
-                        <span id="progress-percent" style="font-weight: 600; color: var(--primary-gold);">0%</span>
-                    </div>
-                </div>
-
-                <div class="widget list-container">
-                    <h3>최근 내역</h3>
-                    <div class="type-filter-bar">
-                        <button class="filter-btn active" data-filter="all">전체</button>
-                        <button class="filter-btn" data-filter="expense">지출</button>
-                        <button class="filter-btn" data-filter="refund">환급</button>
-                        <button class="filter-btn" data-filter="income">월급/부수입</button>
-                        <button class="filter-btn" data-filter="saving">저축</button>
-                    </div>
-                    <table class="transaction-table">
-                        <thead>
-                            <tr>
-                                <th>내용</th>
-                                <th style="width:90px; text-align:right">금액</th>
-                            </tr>
-                        </thead>
-                        <tbody id="transaction-list">
-                            <!-- JS will populate this -->
-                        </tbody>
-                    </table>
-                </div>
-                </div>
-            </section>
-
-            <!-- Input Section -->
-            <section id="input-section" class="page-section section-card">
-                <h2>소비기록 작성</h2>
-                
-                <div class="form-group form-paste">
-                    <label for="sms-input">알림톡 / 문자 붙여넣기</label>
-                    <textarea id="sms-input" rows="4" placeholder="결제 문자를 붙여넣으면 분석하여 아래 폼을 자동으로 채웁니다."></textarea>
-                </div>
-
-                <form id="transaction-form">
-                    <div class="form-group">
-                        <label>기록 유형</label>
-                        <div class="radio-group" style="background-color: transparent; border: none; padding: 0; flex-wrap: wrap;">
-                            <label style="flex:1; min-width:100px; border: 1px solid var(--border-color); border-radius: 8px; font-weight: bold; justify-content: center; cursor: pointer; padding: 10px 4px; text-align:center;"><input type="radio" name="tx_type" value="expense" checked> 📉 지출</label>
-                            <label style="flex:1; min-width:100px; border: 1px solid var(--border-color); border-radius: 8px; font-weight: bold; justify-content: center; cursor: pointer; padding: 10px 4px; text-align:center; color:#2196f3"><input type="radio" name="tx_type" value="refund"> 💵 환급</label>
-                            <label style="flex:1; min-width:100px; border: 1px solid var(--border-color); border-radius: 8px; font-weight: bold; justify-content: center; cursor: pointer; padding: 10px 4px; text-align:center; color:var(--success)"><input type="radio" name="tx_type" value="income"> 📈 월급/부수입</label>
-                            <label style="flex:1; min-width:100px; border: 1px solid var(--border-color); border-radius: 8px; font-weight: bold; justify-content: center; cursor: pointer; padding: 10px 4px; text-align:center; color:var(--primary-gold)"><input type="radio" name="tx_type" value="saving"> 💰 저축</label>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>결제 날짜</label>
-                        <input type="date" id="date-input" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>사용처 (어디서)</label>
-                        <input type="text" id="merchant-input" placeholder="스타벅스, 약국 등 자동/수동 입력" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>금액</label>
-                        <input type="number" id="amount-input" placeholder="숫자만 입력" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>카테고리</label>
-                        <select id="category-select" required>
-                            <option value="food">식비/외식</option>
-                            <option value="living">주거/생활</option>
-                            <option value="traffic">교통/차량</option>
-                            <option value="health">의료/건강</option>
-                            <option value="shopping">쇼핑/개인</option>
-                            <option value="insurance">보험</option>
-                            <option value="gift">선물</option>
-                            <option value="transfer">이체/N빵/환급</option>
-                            <option value="etc">기타</option>
-                        </select>
-                    </div>
-
-                    <!-- 저축 대상 자산 선택 (기록유형=저축일 때만 표시) -->
-                    <div class="form-group" id="saving-target-group" style="display:none; border: 2px solid var(--primary-gold); border-radius: 10px; padding: 12px; background: rgba(255,215,0,0.05);">
-                        <label style="color: var(--primary-gold); font-weight: 700;">💰 어떤 저축 항목에 넣을까요?</label>
-                        <select id="saving-target-select">
-                            <option value="">-- 자산 항목 선택 --</option>
-                            <optgroup label="소리">
-                                <option value="청년 도약_소리">청년 도약_소리</option>
-                                <option value="주택 청약_소리">주택 청약_소리</option>
-                                <option value="신한 종신보험_소리">신한 종신보험_소리</option>
-                                <option value="토스 외화 통장_소리">토스 외화 통장_소리</option>
-                                <option value="토스 자유 적금_소리">토스 자유 적금_소리</option>
-                                <option value="카카오페이증권_소리">카카오페이증권_소리</option>
-                                <option value="연금저축_소리">연금저축_소리</option>
-                            </optgroup>
-                            <optgroup label="상혁">
-                                <option value="종신 보험_상혁">종신 보험_상혁</option>
-                                <option value="주택 청약_상혁">주택 청약_상혁</option>
-                                <option value="청년 도약_상혁">청년 도약_상혁</option>
-                                <option value="개인연금저축_상혁">개인연금저축_상혁</option>
-                            </optgroup>
-                            <optgroup label="공용">
-                                <option value="경조사">경조사</option>
-                                <option value="운동,미용">운동,미용</option>
-                                <option value="예비비">예비비</option>
-                            </optgroup>
-                        </select>
-                        <small style="color: #888; margin-top: 6px; display: block;">저장 시 해당 월의 자산 스냅샷에 자동으로 금액이 추가됩니다.</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>결제자</label>
-                        <div class="radio-group" style="padding: 10px; background-color: #f7f9fc; border-radius: 8px;">
-                            <label><input type="radio" name="author" value="소리" checked> 소리</label>
-                            <label><input type="radio" name="author" value="상혁"> 상혁</label>
-                            <label><input type="radio" name="author" value="공용"> 공용/기타</label>
-                        </div>
-                    </div>
-
-                    <div style="display: flex; gap: 10px;">
-                        <button type="submit" class="btn-primary" id="btn-save-tx" style="flex: 1;">저장하기</button>
-                        <button type="button" class="btn-secondary" id="btn-cancel-edit" style="display: none; flex: 1; background-color: var(--border-color); color: var(--primary-navy);" onclick="cancelEdit()">수정 취소</button>
-                    </div>
-                    <p class="budget-status" id="budget-status">잔여 생활 예산 계산 중...</p>
-                </form>
-            </section>
-
-            <!-- Income Section -->
-            <section id="income-section" class="page-section section-card">
-                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: var(--primary-navy);">수입 내역 관리</h2>
-                    <input type="month" id="income-month-input" form="income-form" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;" required>
-                </div>
-                <form id="income-form">
-                    <fieldset class="setting-group" style="padding-bottom: 0;">
-                        <legend>소리님의 이번 달 수입</legend>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>월급</label>
-                                <input type="number" id="inc-sori-salary" placeholder="0">
-                            </div>
-                            <div class="form-group">
-                                <label>기타/부수입</label>
-                                <input type="number" id="inc-sori-extra" placeholder="0">
-                            </div>
-                        </div>
-                    </fieldset>
-                    <fieldset class="setting-group" style="padding-bottom: 0;">
-                        <legend>상혁님의 이번 달 수입</legend>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>월급</label>
-                                <input type="number" id="inc-sang-salary" placeholder="0">
-                            </div>
-                            <div class="form-group">
-                                <label>기타/부수입</label>
-                                <input type="number" id="inc-sang-extra" placeholder="0">
-                            </div>
-                        </div>
-                    </fieldset>
-                    <button type="submit" class="btn-primary" style="background-color: var(--success);">이 달의 수입 저장하기</button>
-                </form>
-
-                <div class="list-container" style="margin-top: 30px; box-shadow:none; border:1px solid var(--border-color);">
-                    <h3>수입 기록표</h3>
-                    <table class="transaction-table">
-                        <thead>
-                            <tr>
-                                <th>월</th>
-                                <th>소리</th>
-                                <th>상혁</th>
-                                <th>총계</th>
-                                <th style="width: 40px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="income-list">
-                            <!-- JS will populate -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            <!-- Asset Section -->
-            <section id="asset-section" class="page-section section-card">
-                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: var(--primary-navy);">자산 내역 리포트</h2>
-                    <input type="month" id="asset-month-input" form="asset-form" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;" required>
-                </div>
-
-                <div class="widget net-worth" style="margin-bottom: 20px; display: flex; justify-content: space-around; text-align: center; align-items: center; padding: 30px 10px;">
-                    <div style="flex: 1;">
-                        <h4 style="margin-bottom: 10px; color: rgba(255,255,255,0.7); font-size: 0.95rem; font-weight: 400;">자산 합계</h4>
-                        <h2 id="total-asset-display" style="font-size: 1.4rem; margin:0; color: #fff;">0원</h2>
-                    </div>
-                    <div style="width: 1px; height: 50px; background-color: rgba(255,255,255,0.2);"></div>
-                    <div style="flex: 1;">
-                        <h4 style="margin-bottom: 10px; color: rgba(255,255,255,0.7); font-size: 0.95rem; font-weight: 400;">부채 잔액</h4>
-                        <h2 id="total-debt-display" style="font-size: 1.4rem; margin:0; color: #ff8787;">0원</h2>
-                    </div>
-                    <div style="width: 1px; height: 50px; background-color: rgba(255,255,255,0.2);"></div>
-                    <div style="flex: 1;">
-                        <h4 style="margin-bottom: 10px; color: rgba(255,255,255,0.7); font-size: 0.95rem; font-weight: 400;">순자산</h4>
-                        <h1 id="net-worth-display" style="font-size: 1.8rem; margin:0; color: var(--primary-gold);">0원</h1>
-                    </div>
-                </div>
-
-                <div class="widget" style="margin-bottom: 30px;">
-                    <canvas id="asset-chart" style="width: 100%; height: 300px;"></canvas>
-                </div>
-
-                <form id="asset-form">
-                    <p class="subtitle" style="margin-bottom: 15px;">해당 월의 자산/부채 잔고를 입력하면 순자산 그래프가 업데이트됩니다.</p>
-                    <div id="dynamic-assets-container">
-                        <!-- JS dynamically injects asset categories here -->
-                    </div>
-                    <button type="submit" class="btn-primary" style="background-color: var(--primary-gold); color: #fff;">이 달의 자산 현황 저장하기</button>
-                </form>
-            </section>
-
-            <!-- Settings Section -->
-            <section id="settings-section" class="section-card page-section">
-                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: var(--primary-navy);">예산 설정</h2>
-                    <input type="month" id="budget-month-input" form="setting-form" class="header-month-picker" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--primary-gold); font-family: inherit; font-weight: 600; font-size: 1rem; color: var(--primary-navy); background-color: #fff; cursor: pointer; outline: none; flex-grow: 1; max-width: 200px;" required>
-                </div>
-                <p class="subtitle" style="margin-bottom: 20px;">선택한 해당 월에 적용될 생활 예산과 저축 목표를 세팅합니다.</p>
-                <form id="setting-form">
-                    
-                    <fieldset class="setting-group">
-                        <legend>월간 예산 세팅</legend>
-                        <div class="form-group">
-                            <label>월별 생활 예산총액</label>
-                            <input type="number" id="monthly-budget-input" placeholder="예: 2000000">
-                        </div>
-                        <div class="form-group">
-                            <label>이번 달 저축 목표액</label>
-                            <input type="number" id="target-saving-input" placeholder="예: 3000000">
-                        </div>
-                    </fieldset>
-
-                    <button type="submit" class="btn-primary" style="background-color: var(--primary-navy);">이 달의 예산 적용하기</button>
-                </form>
-
-                <div class="list-container" style="margin-top: 30px; box-shadow:none; border:1px solid var(--border-color);">
-                    <h3>예산 기록표</h3>
-                    <table class="transaction-table">
-                        <thead>
-                            <tr>
-                                <th>적용 월</th>
-                                <th>생활 예산</th>
-                                <th>저축 목표</th>
-                                <th style="width: 40px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="budget-list">
-                            <!-- JS will populate -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-        </main>
+    <div class="matrix-axis-row">
+      <div class="axis-col-spacer"></div>
+      <div class="axis-label urgent">긴급함</div>
+      <div class="axis-label not-urgent">긴급하지 않음</div>
+    </div>
+    <div id="sort-menu" class="sort-menu">
+      <button class="sort-opt active" data-filter="incomplete">미완료</button>
+      <button class="sort-opt" data-filter="complete">완료</button>
     </div>
 
-    <!-- Toast Message -->
-    <div id="toast" class="toast">억! 소리 나게 완료!</div>
+    <div class="matrix-body">
+      <div class="axis-label-row">
+        <div class="row-axis-label important">중요함</div>
+        <div class="row-axis-label not-important">중요하지 않음</div>
+      </div>
+      <div class="matrix-grid" id="matrix-grid">
+        <div class="quadrant" id="q-do-panel" data-q="do">
+          <div class="quadrant-header">
+            <span class="q-label do">Do</span>
+            <button class="q-add-btn open-quick-add" data-default-matrix="do" aria-label="Do에 추가">+</button>
+          </div>
+          <div class="q-tasks" id="q-do"></div>
+        </div>
+        <div class="quadrant" id="q-plan-panel" data-q="plan">
+          <div class="quadrant-header">
+            <span class="q-label plan">Plan</span>
+            <button class="q-add-btn open-quick-add" data-default-matrix="plan" aria-label="Plan에 추가">+</button>
+          </div>
+          <div class="q-tasks" id="q-plan"></div>
+        </div>
+        <div class="quadrant" id="q-delegate-panel" data-q="delegate">
+          <div class="quadrant-header">
+            <span class="q-label delegate">Delegate</span>
+            <button class="q-add-btn open-quick-add" data-default-matrix="delegate" aria-label="Delegate에 추가">+</button>
+          </div>
+          <div class="q-tasks" id="q-delegate"></div>
+        </div>
+        <div class="quadrant" id="q-eliminate-panel" data-q="eliminate">
+          <div class="quadrant-header">
+            <span class="q-label eliminate">Eliminate</span>
+            <button class="q-add-btn open-quick-add" data-default-matrix="eliminate" aria-label="Eliminate에 추가">+</button>
+          </div>
+          <div class="q-tasks" id="q-eliminate"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <script type="module" src="app.js"></script>
+  <!-- ══════════════ SCREEN: DASHBOARD ══════════════ -->
+  <div id="screen-dashboard" class="screen">
+    <header class="screen-header">
+      <h1 class="screen-title">대시보드</h1>
+      <div class="header-right">
+        <button class="icon-btn open-quick-add" aria-label="할 일 추가" data-default-matrix="do">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+    </header>
+    <div id="status-tabs" class="status-tabs">
+      <button class="stab active" data-status="incomplete">미완료</button>
+      <button class="stab" data-status="complete">완료</button>
+      <button class="stab" data-status="all">전체</button>
+    </div>
+    <div class="task-list" id="dashboard-list"></div>
+  </div>
+
+  <!-- ══════════════ SCREEN: CALENDAR ══════════════ -->
+  <div id="screen-calendar" class="screen">
+    <header class="screen-header">
+      <h1 class="screen-title">Calendar</h1>
+      <div class="header-right">
+        <button class="icon-btn open-quick-add" aria-label="할 일 추가" data-default-matrix="do">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="icon-btn" aria-label="필터">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="calendar-wrap">
+      <div class="cal-nav">
+        <button class="cal-arrow" id="cal-prev" aria-label="이전 달">&#8249;</button>
+        <span class="cal-month-label" id="cal-month-label">2026년 4월</span>
+        <button class="cal-arrow" id="cal-next" aria-label="다음 달">&#8250;</button>
+      </div>
+      <div class="cal-weekdays">
+        <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-day-tasks" id="cal-day-tasks">
+        <p class="cal-day-label" id="cal-day-label"></p>
+        <div class="task-list" id="cal-day-list" style="padding:0 0 8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ SCREEN: STATS ══════════════ -->
+  <div id="screen-stats" class="screen">
+    <header class="screen-header">
+      <h1 class="screen-title">Stats</h1>
+    </header>
+    <div class="stats-scroll" id="stats-container"></div>
+  </div>
+
+  <!-- ══════════════ SCREEN: MEMO ══════════════ -->
+  <div id="screen-memo" class="screen">
+    <div id="screen-memo-list" style="display:flex;flex-direction:column;height:100%">
+      <header class="screen-header">
+        <h1 class="screen-title" style="color:var(--plan)">메모</h1>
+        <div class="header-right">
+          <button class="icon-btn" id="memo-add-btn" aria-label="새 메모">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--plan)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="memo-scroll" id="memo-list-container">
+        <!-- Memo cards populated here -->
+      </div>
+    </div>
+    
+    <div id="screen-memo-detail" style="display:none;flex-direction:column;height:100%">
+      <header class="screen-header" style="justify-content:space-between">
+        <button class="icon-btn" id="memo-back-btn" aria-label="뒤로" style="margin-left:-8px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--plan)" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          <span style="color:var(--plan);font-size:16px;margin-left:4px">목록</span>
+        </button>
+        <button class="header-text-btn" id="memo-save-btn">확인</button>
+      </header>
+      <div class="memo-toolbar">
+        <button data-cmd="bold"><b>B</b></button>
+        <button data-cmd="italic"><i>I</i></button>
+        <button data-cmd="strikeThrough"><s>S</s></button>
+        <span class="tb-div"></span>
+        <button data-cmd="insertUnorderedList">•</button>
+        <button data-cmd="insertOrderedList">1.</button>
+        <span class="tb-div"></span>
+        <button data-cmd="indent">➡</button>
+        <button data-cmd="outdent">⬅</button>
+      </div>
+      <div id="memo-content-area" class="memo-textarea" contenteditable="true" aria-placeholder="메모를 작성하세요..."></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ BOTTOM NAV ══════════════ -->
+  <nav id="bottom-nav" role="navigation" aria-label="메인 네비게이션">
+    <button class="nav-item active" data-tab="matrix" aria-label="매트릭스">
+      <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor" opacity=".4"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".25"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".15"/></svg>
+      <span>매트릭스</span>
+    </button>
+    <button class="nav-item" data-tab="dashboard" aria-label="대시보드">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="4" rx="1.5" fill="currentColor" stroke="none"/><rect x="3" y="10" width="18" height="4" rx="1.5" fill="currentColor" stroke="none"/><rect x="3" y="17" width="12" height="4" rx="1.5" fill="currentColor" stroke="none"/></svg>
+      <span>대시보드</span>
+    </button>
+    <button class="nav-item" data-tab="calendar" aria-label="캘린더">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></svg>
+      <span>캘린더</span>
+    </button>
+    <button class="nav-item" data-tab="memo" aria-label="메모">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span>메모</span>
+    </button>
+    <button class="nav-item" data-tab="stats" aria-label="통계">
+      <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="13" width="4" height="8" rx="1" fill="currentColor"/><rect x="10" y="8" width="4" height="13" rx="1" fill="currentColor"/><rect x="17" y="4" width="4" height="17" rx="1" fill="currentColor"/></svg>
+      <span>통계</span>
+    </button>
+  </nav>
+
+  <!-- ══════════════ QUICK ADD BOTTOM SHEET ══════════════ -->
+  <div id="quick-add-sheet" class="bottom-sheet" role="dialog" aria-label="빠른 할 일 추가" aria-hidden="true">
+    <div class="sheet-handle"></div>
+    <div class="sheet-inner">
+      <div class="sheet-topbar">
+        <button class="sheet-close-btn" id="quick-close" aria-label="닫기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <button class="sheet-save-btn" id="quick-save" aria-label="저장">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+      </div>
+      <input type="text" id="quick-title" class="quick-input" placeholder="할 일을 입력하세요..." maxlength="100" autocomplete="off">
+      <div class="sheet-section">
+        <p class="sheet-label">Matrix</p>
+        <div class="m-selector" id="quick-matrix-sel">
+          <button class="m-btn active" data-m="do"><div class="mini-mx-lg do"></div><span>실행</span></button>
+          <button class="m-btn" data-m="plan"><div class="mini-mx-lg plan"></div><span>계획</span></button>
+          <button class="m-btn" data-m="delegate"><div class="mini-mx-lg delegate"></div><span>위임</span></button>
+          <button class="m-btn" data-m="eliminate"><div class="mini-mx-lg eliminate"></div><span>제거</span></button>
+        </div>
+      </div>
+      <div class="sheet-section">
+        <p class="sheet-label">Color Group</p>
+        <div class="color-sel" id="quick-color-sel"></div>
+      </div>
+      <button class="full-add-link" id="open-full-add">+ 상세 입력</button>
+    </div>
+  </div>
+
+  <!-- ══════════════ FULL ADD TASK MODAL ══════════════ -->
+  <div id="full-add-modal" class="modal" role="dialog" aria-label="할 일 등록" aria-hidden="true">
+    <div class="modal-header">
+      <button class="modal-cancel" id="full-close" aria-label="취소">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <span class="modal-date-label" id="modal-date-label">날짜 선택</span>
+      <button class="modal-confirm" id="full-save" aria-label="저장">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <input type="text" id="full-title" class="full-title-input" placeholder="할 일 내용" maxlength="200" autocomplete="off">
+      </div>
+
+      <div class="form-card">
+        <p class="form-card-label">체크리스트</p>
+        <div id="checklist-items"></div>
+        <div class="checklist-add-row">
+          <input type="text" id="checklist-input" class="checklist-input" placeholder="새 항목 추가...">
+          <button class="checklist-add-btn" id="checklist-add" aria-label="항목 추가">+</button>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <div class="form-card-header">
+          <p class="form-card-label">매트릭스 영역</p>
+          <span class="form-hint">중요함 ↕ 긴급함</span>
+        </div>
+        <div class="m-selector" id="full-matrix-sel">
+          <button class="m-btn active" data-m="do"><div class="mini-mx-lg do"></div><span>실행</span></button>
+          <button class="m-btn" data-m="plan"><div class="mini-mx-lg plan"></div><span>계획</span></button>
+          <button class="m-btn" data-m="delegate"><div class="mini-mx-lg delegate"></div><span>위임</span></button>
+          <button class="m-btn" data-m="eliminate"><div class="mini-mx-lg eliminate"></div><span>제거</span></button>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <p class="form-card-label">컬러 그룹</p>
+        <div class="color-sel" id="full-color-sel"></div>
+      </div>
+
+      <div class="form-card">
+        <p class="form-card-label">할 일 유형</p>
+        <div class="type-toggle">
+          <button class="type-btn active" data-type="once" id="type-once">📅 한 번</button>
+          <button class="type-btn" data-type="repeat" id="type-repeat">🔄 반복</button>
+        </div>
+      </div>
+
+      <div id="once-settings" class="form-card">
+        <div class="setting-row">
+          <span class="setting-icon">📅</span>
+          <span class="setting-label">날짜</span>
+          <input type="date" id="task-date" class="setting-value-input">
+        </div>
+      </div>
+
+      <div id="repeat-settings" class="form-card" style="display:none">
+        <div class="setting-row">
+          <span class="setting-icon">📅</span>
+          <span class="setting-label">시작일</span>
+          <input type="date" id="repeat-start" class="setting-value-input">
+        </div>
+        <div class="setting-row" style="margin-top:10px">
+          <span class="setting-icon">📅</span>
+          <span class="setting-label">종료일</span>
+          <input type="date" id="repeat-end" class="setting-value-input">
+        </div>
+        <p class="form-card-label" style="margin-top:16px">반복 요일</p>
+        <div class="day-sel" id="day-sel">
+          <button class="day-btn" data-day="Mon">월</button>
+          <button class="day-btn" data-day="Tue">화</button>
+          <button class="day-btn" data-day="Wed">수</button>
+          <button class="day-btn" data-day="Thu">목</button>
+          <button class="day-btn" data-day="Fri">금</button>
+          <button class="day-btn" data-day="Sat">토</button>
+          <button class="day-btn" data-day="Sun">일</button>
+        </div>
+        <div class="setting-row" style="margin-top:16px">
+          <span class="setting-icon">⏰</span>
+          <span class="setting-label" style="flex:1">알림 시간
+            <span style="display:block;font-size:10px;color:#9BA3AF;margin-top:2px;font-weight:400">(앱이 켜져있을 때만 울림)</span>
+          </span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="notif-toggle">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div id="notif-time-row" class="setting-row" style="margin-top:10px; display:none">
+          <input type="time" id="notif-time" class="setting-value-input" style="margin-left:auto">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TASK DETAIL PANEL -->
+  <div id="task-detail-modal" class="modal" role="dialog" aria-label="할 일 상세" aria-hidden="true">
+    <div class="modal-header">
+      <button class="modal-cancel" id="detail-close" aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <span class="modal-date-label" id="detail-date-label"></span>
+      <button class="modal-confirm" id="detail-save" aria-label="저장">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+  </div>
+
+  <!-- ROUTINE DETAIL MODAL -->
+  <div id="routine-modal" class="modal" role="dialog" aria-label="루틴 진행률" aria-hidden="true">
+    <div class="modal-header">
+      <button class="modal-cancel" id="routine-close" aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <span class="modal-date-label" id="routine-title-lbl">루틴 진행률</span>
+      <button class="modal-confirm" id="routine-edit-btn" style="background:var(--bg);color:var(--text2)" aria-label="편집">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="routine-body"></div>
+  </div>
+
+  <!-- OVERLAY -->
+  <div id="overlay" class="overlay"></div>
+</div>
+
+<script type="module" src="app.js"></script>
 </body>
 </html>
