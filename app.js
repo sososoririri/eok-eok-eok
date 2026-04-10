@@ -1021,6 +1021,9 @@ function bindEvents() {
   document.getElementById('routine-close').addEventListener('click', e => {
     e.stopPropagation(); e.preventDefault();
     closeRoutineDetail();
+    // Ghost click block
+    document.body.style.pointerEvents = 'none';
+    setTimeout(() => { document.body.style.pointerEvents = ''; }, 350);
   });
   document.getElementById('routine-edit-btn').addEventListener('click', e => {
     const id = e.currentTarget.dataset.id;
