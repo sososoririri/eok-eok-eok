@@ -894,7 +894,7 @@ function renderAll() {
         let dailyExpense = 0;
         dateGroups[dateStr].forEach(tx => {
             if (tx.type === 'expense') dailyExpense += tx.amount;
-            if (tx.type === 'refund') dailyExpense -= tx.amount;
+            // 환급이나 수입 등 반영하지 않고 오직 실제 지출(expense)만 합산
         });
 
         const expenseText = dailyExpense > 0 
