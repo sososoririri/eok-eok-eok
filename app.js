@@ -890,10 +890,26 @@ function renderAll() {
         const dd = dateStr.substring(8, 10);
         const dayNames = ['일','월','화','수','목','금','토'];
         const dayOfWeek = dayNames[new Date(dateStr).getDay()];
+        
+        let dailyExpense = 0;
+        dateGroups[dateStr].forEach(tx => {
+            if (tx.type === 'expense') dailyExpense += tx.amount;
+            if (tx.type === 'refund') dailyExpense -= tx.amount;
+        });
+
+        const expenseText = dailyExpense > 0 
+            ? '<span style="color:var(--danger); font-size:0.75rem; font-weight:600;">' + dailyExpense.toLocaleString() + '원 지출</span>' 
+            : '';
+
         headerTr.innerHTML = '<td colspan="2" style="' +
             'background:var(--bg-color); color:var(--primary-navy); font-weight:700; ' +
             'font-size:0.78rem; padding:8px 4px 4px; border-bottom:2px solid var(--primary-gold)' +
-            '">' + mm + '월 ' + dd + '일 (' + dayOfWeek + ')</td>';
+            '">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+            '<span>' + mm + '월 ' + dd + '일 (' + dayOfWeek + ')</span>' +
+            expenseText +
+            '</div>' +
+            '</td>';
         tbody.appendChild(headerTr);
 
         dateGroups[dateStr].forEach(tx => {
